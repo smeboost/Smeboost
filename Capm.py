@@ -918,7 +918,7 @@ def generate_pdf(sme_data, personal_info, toc_page_numbers):
     elements.append(NextPageTemplate('First'))
     elements.append(PageBreak())
     if os.path.exists("smeboostback.png"):
-        img = Image("smeboost.png", width=letter[0], height=letter[1])
+        img = Image("smeboostback.png", width=letter[0], height=letter[1])
         elements.append(img)
     
     doc.build(elements, canvasmaker=NumberedCanvas)
