@@ -21,6 +21,20 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, Image, NextPageTemplate
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import datetime
+import ssl
+import logging
+EMAIL_SENDER = "smeboost@ceaiglobal.com"
+EMAIL_PASSWORD = "MyFinB2024123#"
+SMTP_SERVER = "mail.ceaiglobal.com"  # Changed to hostinger server
+SMTP_PORT = 465
+# Set up logging
+context = ssl.create_default_context()
 # Constants
 BUSINESS_OPTIONS = {
     "Business Valuation": "I want to assess my company's worth, helping me make informed decisions and gain investor trust.",
@@ -33,7 +47,653 @@ BUSINESS_OPTIONS = {
     "Business Remodelling": "I want to reshape my operations to stay relevant and seize new market opportunities.",
     "Succession Planning": "I want to prepare for future leadership transitions, ensuring the right people continue my business legacy."
 }
+def create_ascii_table(headers, rows, column_widths=None):
+    """Create an ASCII table for email formatting."""
+    if column_widths is None:
+        # Calculate column widths based on content
+        column_widths = []
+        for i in range(len(headers)):
+            column_content = [str(row[i]) for row in rows] + [headers[i]]
+            column_widths.append(max(len(str(x)) for x in column_content) + 2)
 
+    # Create the header separator
+    separator = '+' + '+'.join('-' * width for width in column_widths) + '+'
+
+    # Create the header
+    header_row = '|' + '|'.join(
+        str(headers[i]).center(column_widths[i])
+        for i in range(len(headers))
+    ) + '|'
+
+    # Create the rows
+    data_rows = []
+    for row in rows:
+        data_row = '|' + '|'.join(
+            str(row[i]).center(column_widths[i])
+            for i in range(len(row))
+        ) + '|'
+        data_rows.append(data_row)
+
+    # Combine all parts
+    table = '\n'.join([
+        separator,
+        header_row,
+        separator,
+        '\n'.join(data_rows),
+        separator
+    ])
+
+    return table
+def send_email_with_attachment(receiver_email, company_name, subject, body, pdf_buffer, statistics, contact_details):
+    """
+    Send email with PDF report attachment using ceaiglobal.com email
+    """
+    try:
+        # Log attempt
+        logging.info(f"Attempting to send email to: {receiver_email}")
+        
+        # Create message container
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_SENDER
+        msg['To'] = receiver_email
+        msg['Subject'] = f"{subject} - {company_name}"
+
+        # Create statistics tables
+        summary_headers = ['Metric', 'Input', 'Output', 'Total']
+        summary_rows = [
+            ['Words', 
+             f"{statistics['total_input_words']:,}", 
+             f"{statistics['total_output_words']:,}",
+             f"{statistics['total_input_words'] + statistics['total_output_words']:,}"],
+            ['Tokens', 
+             f"{statistics['total_input_tokens']:,}", 
+             f"{statistics['total_output_tokens']:,}",
+             f"{statistics['total_input_tokens'] + statistics['total_output_tokens']:,}"]
+        ]
+        summary_table = create_ascii_table(summary_headers, summary_rows)
+
+        # Create the email body with formatting
+        formatted_body = f"""Dear Recipient,
+
+{body}
+
+{contact_details}
+
+Company Name: {company_name}
+Generated Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+ANALYSIS STATISTICS SUMMARY:
+{summary_table}
+
+Best regards,
+CEAI Business Analysis Team"""
+        # Attach the formatted body
+        msg.attach(MIMEText(formatted_body, 'plain'))
+
+        # Prepare and attach PDF
+        attachment = MIMEBase('application', 'octet-stream')
+        attachment.set_payload(pdf_buffer.getvalue())
+        encoders.encode_base64(attachment)
+        
+        # Create sanitized filename
+        sanitized_company_name = "".join(x for x in company_name if x.isalnum() or x in (' ', '-', '_')).strip()
+        filename = f"business_analysis_{sanitized_company_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        
+        attachment.add_header(
+            'Content-Disposition',
+            f'attachment; filename="{filename}"'
+        )
+        msg.attach(attachment)
+
+        # Create SSL context
+        context = ssl.create_default_context()
+        
+        # Attempt to send email
+        logging.info("Connecting to SMTP server...")
+        try:
+            # Try SSL first (port 465)
+            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
+                logging.info("Connected with SSL")
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.send_message(msg)
+        except Exception as ssl_error:
+            logging.warning(f"SSL connection failed: {str(ssl_error)}")
+            logging.info("Trying TLS connection...")
+            # If SSL fails, try TLS (port 587)
+            with smtplib.SMTP(SMTP_SERVER, 587) as server:
+                server.starttls(context=context)
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.send_message(msg)
+                
+        st.success(f"Report sent successfully to {receiver_email} for {company_name}.")
+        logging.info(f"Email sent successfully to {receiver_email}")
+        
+    except Exception as e:
+        error_msg = f"Error sending email: {str(e)}"
+        logging.error(error_msg, exc_info=True)
+        st.error(error_msg)
+        print(f"Detailed email error: {str(e)}")  # For debugging
+def send_email_with_attachment2(receiver_email, company_name, subject, body, pdf_buffer, statistics, contact_details):
+    """
+    Send email with PDF report attachment using ceaiglobal.com email
+    """
+    try:
+        # Log attempt
+        logging.info(f"Attempting to send email to: {receiver_email}")
+        
+        # Create message container
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_SENDER
+        msg['To'] = receiver_email
+        msg['Subject'] = f"{subject} - {company_name}"
+
+        # Create statistics tables
+        summary_headers = ['Metric', 'Input', 'Output', 'Total']
+        summary_rows = [
+            ['Words', 
+             f"{statistics['total_input_words']:,}", 
+             f"{statistics['total_output_words']:,}",
+             f"{statistics['total_input_words'] + statistics['total_output_words']:,}"],
+            ['Tokens', 
+             f"{statistics['total_input_tokens']:,}", 
+             f"{statistics['total_output_tokens']:,}",
+             f"{statistics['total_input_tokens'] + statistics['total_output_tokens']:,}"]
+        ]
+        summary_table = create_ascii_table(summary_headers, summary_rows)
+
+        # Create the email body with formatting
+        formatted_body = f"""Dear Recipient,
+
+{body}
+
+{contact_details}
+
+Company Name: {company_name}
+Generated Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+ANALYSIS STATISTICS SUMMARY:
+{summary_table}
+
+Best regards,
+CEAI Business Analysis Team"""
+
+        # Attach the formatted body
+        msg.attach(MIMEText(formatted_body, 'plain'))
+
+        # Prepare and attach PDF
+        attachment = MIMEBase('application', 'octet-stream')
+        attachment.set_payload(pdf_buffer.getvalue())
+        encoders.encode_base64(attachment)
+        
+        # Create sanitized filename
+        sanitized_company_name = "".join(x for x in company_name if x.isalnum() or x in (' ', '-', '_')).strip()
+        filename = f"business_analysis_{sanitized_company_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        
+        attachment.add_header(
+            'Content-Disposition',
+            f'attachment; filename="{filename}"'
+        )
+        msg.attach(attachment)
+
+        # Create SSL context
+        context = ssl.create_default_context()
+        
+        # Attempt to send email
+        logging.info("Connecting to SMTP server...")
+        try:
+            # Try SSL first (port 465)
+            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
+                logging.info("Connected with SSL")
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.send_message(msg)
+        except Exception as ssl_error:
+            logging.warning(f"SSL connection failed: {str(ssl_error)}")
+            logging.info("Trying TLS connection...")
+            # If SSL fails, try TLS (port 587)
+            with smtplib.SMTP(SMTP_SERVER, 587) as server:
+                server.starttls(context=context)
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.send_message(msg)
+                
+        st.success(f"Report sent successfully to {receiver_email} for {company_name}.")
+        logging.info(f"Email sent successfully to {receiver_email}")
+        
+    except Exception as e:
+        error_msg = f"Error sending email: {str(e)}"
+        logging.error(error_msg, exc_info=True)
+        st.error(error_msg)
+        print(f"Detailed email error: {str(e)}")  # For debugging
+def calculate_analysis_statistics(session_state):
+    """
+    Calculate word and token counts for input and output separately.
+    """
+    statistics = {
+        'total_input_words': 0,
+        'total_input_tokens': 0,
+        'total_output_words': 0,
+        'total_output_tokens': 0,
+        'input_counts': {},
+        'output_counts': {}
+    }
+    
+    # Input fields to analyze
+    input_keys = [
+        'business_profile',
+        'business_priorities',
+        'working_capital',
+        'strategic_planning',
+        'growth_projections'
+    ]
+    
+    # Output fields to analyze
+    output_keys = [
+        'business_profile_analysis',
+        'priorities_analysis',
+        'executive_summary',
+        'capital_analysis',
+        'strategic_analysis',
+        'financial_projections'
+    ]
+    
+    def count_words(text):
+        if not text:
+            return 0
+        if isinstance(text, dict):
+            text = str(text)
+        return len([word for word in str(text).split() if word.strip()])
+    
+    def count_tokens(text):
+        if not text:
+            return 0
+        if isinstance(text, dict):
+            text = str(text)
+        words = count_words(text)
+        punctuation = len([char for char in str(text) if char in '.,!?;:()[]{}""\''])
+        return words + punctuation
+    
+    # Calculate input counts
+    for key in input_keys:
+        if key in session_state and session_state[key]:
+            words = count_words(session_state[key])
+            tokens = count_tokens(session_state[key])
+            statistics['input_counts'][key] = {
+                'words': words,
+                'tokens': tokens
+            }
+            statistics['total_input_words'] += words
+            statistics['total_input_tokens'] += tokens
+    
+    # Calculate output counts
+    for key in output_keys:
+        if key in session_state and session_state[key]:
+            words = count_words(session_state[key])
+            tokens = count_tokens(session_state[key])
+            statistics['output_counts'][key] = {
+                'words': words,
+                'tokens': tokens
+            }
+            statistics['total_output_words'] += words
+            statistics['total_output_tokens'] += tokens
+    
+    # Add selected business options analysis if present
+    if 'business_options' in session_state:
+        for option in session_state['business_options']:
+            key = f"{option.lower().replace(' ', '_')}_analysis"
+            if key in session_state and session_state[key]:
+                words = count_words(session_state[key])
+                tokens = count_tokens(session_state[key])
+                statistics['output_counts'][key] = {
+                    'words': words,
+                    'tokens': tokens
+                }
+                statistics['total_output_words'] += words
+                statistics['total_output_tokens'] += tokens
+    
+    return statistics
+def create_formatted_table(table_data, styles):
+    """Create a professionally formatted table with consistent styling"""
+    from reportlab.lib import colors
+    from reportlab.platypus import Table, TableStyle
+    from reportlab.lib.units import inch
+    
+    # Ensure all rows have the same number of columns
+    max_cols = max(len(row) for row in table_data)
+    table_data = [row + [''] * (max_cols - len(row)) for row in table_data]
+    
+    # Calculate dynamic column widths based on content length
+    total_width = 6.5 * inch
+    col_widths = []
+    
+    if max_cols > 1:
+        # Calculate max content length for each column
+        col_lengths = [0] * max_cols
+        for row in table_data:
+            for i, cell in enumerate(row):
+                content_length = len(str(cell))
+                col_lengths[i] = max(col_lengths[i], content_length)
+                
+        # Distribute widths proportionally based on content length
+        total_length = sum(col_lengths)
+        for length in col_lengths:
+            width = max((length / total_length) * total_width, inch)  # Minimum 1 inch
+            col_widths.append(width)
+            
+        # Adjust widths to fit page
+        scale = total_width / sum(col_widths)
+        col_widths = [w * scale for w in col_widths]
+    else:
+        col_widths = [total_width]
+    
+    # Create table with calculated widths
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    
+    # Enhanced table styling
+    style = TableStyle([
+        # Header styling
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#E5E7EB')),  # Lighter gray
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1F2937')),   # Dark gray
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 15),
+        ('TOPPADDING', (0, 0), (-1, 0), 15),
+        
+        # Content styling
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#374151')),  # Medium gray
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 12),
+        
+        # Grid styling
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB')),
+        ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor('#2B6CB0')),  # Blue header separator
+        
+        # Alignment
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),  # Center header
+        ('ALIGN', (0, 1), (-1, -1), 'LEFT'),   # Left align content
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        
+        # Zebra striping for better readability
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+        
+        # Cell padding
+        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+    ])
+    
+    # Apply enhanced word wrapping to all cells
+    wrapped_data = []
+    for row in table_data:
+        wrapped_row = []
+        for cell in row:
+            if isinstance(cell, (str, int, float)):
+                # Create paragraph style based on whether it's a header or content
+                if len(wrapped_data) == 0:  # Header row
+                    style = styles['subheading']
+                else:
+                    style = styles['content']
+                wrapped_cell = Paragraph(str(cell), style)
+            else:
+                wrapped_cell = cell
+            wrapped_row.append(wrapped_cell)
+        wrapped_data.append(wrapped_row)
+    
+    table = Table(wrapped_data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(style)
+    return table
+
+def clean_text(text):
+    """Clean and format text by removing unwanted formatting while preserving structure"""
+    if not text:
+        return ""
+    
+    # Remove style tags
+    text = re.sub(r'<userStyle>.*?</userStyle>', '', text)
+    
+    # Remove Markdown formatting while preserving structure
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Bold
+    text = re.sub(r'\*(.*?)\*', r'\1', text)      # Italic
+    text = re.sub(r'_(.*?)_', r'\1', text)        # Underscore
+    
+    # Improve spacing around punctuation
+    text = re.sub(r':(?!\s)', ': ', text)         # Add space after colons
+    text = re.sub(r'\s+([.,;!?])', r'\1', text)   # Remove space before punctuation
+    text = re.sub(r'([.,;!?])(?!\s)', r'\1 ', text)  # Add space after punctuation
+    
+    # Handle headers while preserving hierarchy
+    text = re.sub(r'^#{1,6}\s*(.+)$', r'\1', text, flags=re.MULTILINE)
+    
+    # Preserve paragraph structure
+    paragraphs = text.split('\n\n')
+    paragraphs = [' '.join(p.split()) for p in paragraphs]
+    text = '\n\n'.join(paragraphs)
+    
+    return text.strip()
+
+def create_highlight_box(text, styles):
+    """Create an enhanced highlighted box with improved styling"""
+    return Table(
+        [[Paragraph(f"• {text}", styles['content'])]],
+        colWidths=[6*inch],
+        style=TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F3F8FF')),  # Light blue
+            ('BORDER', (0,0), (-1,-1), 1, colors.HexColor('#2B6CB0')),   # Blue border
+            ('PADDING', (0,0), (-1,-1), 15),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('ROUNDEDCORNERS', [5, 5, 5, 5]),  # Rounded corners
+            # Add subtle shadow effect
+            ('BOX', (0,0), (-1,-1), 2, colors.HexColor('#E2E8F0')),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 18),
+            ('TOPPADDING', (0,0), (-1,-1), 18),
+        ])
+    )
+def process_content(content, styles, elements):
+    """Process content with proper formatting and structure"""
+    if not content:
+        return
+    
+    # Handle case where content is a dictionary
+    if isinstance(content, dict):
+        for title, analysis in content.items():
+            elements.append(Spacer(1, 0.3*inch))  # Add more space before sections
+            elements.append(Paragraph(title, styles['heading']))
+            elements.append(Spacer(1, 0.1*inch))
+            if isinstance(analysis, str):
+                paragraphs = analysis.strip().split('\n\n')  # Split on double newlines
+                for para in paragraphs:
+                    if para.strip():
+                        process_paragraph(para.strip(), styles, elements)
+            elements.append(Spacer(1, 0.2*inch))
+        return
+
+    # Define all possible section headers
+    section_headers = [
+        "Company Profile Analysis",
+        "Industry Overview",
+        "SWOT Analysis",
+        "Financial and Operating Summary",
+        "Business Needs Analysis",
+        "Expanded Analysis",
+        "Synthesis and Organization",
+        "Practical Examples",
+        "Strategic Implications",
+        "Working Capital Planning",
+        "Amount vs Purpose Analysis",
+        "Risk Assessment",
+        "Benefits Analysis",
+        "Eligibility Status",
+        "Detailed Analysis of Unmet Criteria",
+        "Eligibility Score",
+        "Advisor/Coach Need Analysis",
+        "Targeted Solutions",
+        "KPI Timeline Breakdown",
+        "Benefits and Impact Analysis",
+        "Potential Impact on Financing Eligibility",
+        "Potential Challenges and Mitigation Strategies",
+        "Funding Request",
+        "Business Profile",
+        "Detailed Criteria Analysis",
+        "Financial Profile",
+        "Recommendations",
+        "Competitive Landscape",
+        "Industry Statistics and Benchmarks",
+        "Market Size and Trends",
+        "Working Planning Requirements Summary",
+        "Forward Looking Quote",
+        "Implementation Strategy",
+        "Summary Points Table",
+        "Growth Assumptions Narrative"
+    ]
+
+    # Split content into sections while preserving structure
+    sections = re.split(r'\n\s*\n', content)
+    in_table = False
+    table_data = []
+    
+    for section in sections:
+        if not section.strip():
+            continue
+            
+        lines = section.strip().split('\n')
+        first_line = lines[0].strip()
+        
+        # Clean up the header text
+        first_line = re.sub(r'^[#\s*]+', '', first_line)  # Remove Markdown markers
+        first_line = re.sub(r'[\*:_]+$', '', first_line)  # Remove trailing markers
+        first_line = re.sub(r'^\d+\.\s*', '', first_line) # Remove leading numbers
+        
+        # Check if this is a header
+        is_header = any(header.lower() in first_line.lower() for header in section_headers)
+        
+        # Handle table detection
+        if any('|' in line for line in lines) and not in_table:
+            # Process table content
+            table_data = []
+            header_processed = False
+            
+            for line in lines:
+                if '|' in line:
+                    if '-|-' in line:  # Skip separator lines
+                        continue
+                        
+                    cells = [cell.strip() for cell in line.split('|')]
+                    cells = [cell for cell in cells if cell]  # Remove empty cells
+                    
+                    if cells:
+                        if not header_processed:
+                            # Process header row
+                            cells = [Paragraph(str(cell), styles['subheading']) for cell in cells]
+                            header_processed = True
+                        else:
+                            # Process regular rows
+                            cells = [Paragraph(str(cell), styles['content']) for cell in cells]
+                        table_data.append(cells)
+            
+            if table_data:
+                elements.append(Spacer(1, 0.2*inch))
+                table = create_formatted_table(table_data, styles)
+                elements.append(table)
+                elements.append(Spacer(1, 0.2*inch))
+            continue
+        
+        if is_header:
+            # Add spacing before headers
+            elements.append(Spacer(1, 0.3*inch))
+            
+            # Determine header level and style
+            if first_line in section_headers:
+                elements.append(Paragraph(first_line, styles['heading']))
+            else:
+                elements.append(Paragraph(first_line, styles['subheading']))
+            
+            elements.append(Spacer(1, 0.1*inch))
+            
+            # Process remaining lines in the section
+            if len(lines) > 1:
+                for para in lines[1:]:
+                    if para.strip():
+                        process_paragraph(para, styles, elements)
+        else:
+            # Process as regular paragraph content
+            for para in lines:
+                if para.strip():
+                    process_paragraph(para, styles, elements)
+    
+    return elements
+
+def process_paragraph(para, styles, elements):
+    """Process individual paragraph with enhanced formatting"""
+    clean_para = clean_text(para)
+    if not clean_para:
+        return
+    
+    # Handle bulleted lists
+    if clean_para.startswith(('•', '-', '*', '→')):
+        text = clean_para.lstrip('•-*→ ').strip()
+        bullet_style = ParagraphStyle(
+            'BulletPoint',
+            parent=styles['content'],
+            leftIndent=20,
+            firstLineIndent=0,
+            spaceBefore=6,
+            spaceAfter=6,
+            bulletIndent=10,
+            bulletFontName='Symbol'
+        )
+        elements.append(Paragraph(f"• {text}", bullet_style))
+        elements.append(Spacer(1, 0.05*inch))
+    
+    # Handle numbered points
+    elif re.match(r'^\d+\.?\s+', clean_para):
+        text = re.sub(r'^\d+\.?\s+', '', clean_para)
+        elements.extend([
+            Spacer(1, 0.1*inch),
+            create_highlight_box(text, styles),
+            Spacer(1, 0.1*inch)
+        ])
+    
+    # Handle quoted text
+    elif clean_para.strip().startswith('"') and clean_para.strip().endswith('"'):
+        quote_style = ParagraphStyle(
+            'Quote',
+            parent=styles['content'],
+            fontSize=11,
+            leftIndent=30,
+            rightIndent=30,
+            spaceBefore=12,
+            spaceAfter=12,
+            leading=16,
+            textColor=colors.HexColor('#2D3748'),
+            borderColor=colors.HexColor('#E2E8F0'),
+            borderWidth=1,
+            borderPadding=10,
+            borderRadius=5
+        )
+        elements.append(Paragraph(clean_para, quote_style))
+        elements.append(Spacer(1, 0.1*inch))
+    
+    # Handle section titles
+    elif re.match(r'^[A-Z][^.!?]*:$', clean_para):
+        elements.append(Spacer(1, 0.2*inch))
+        elements.append(Paragraph(clean_para, styles['subheading']))
+        elements.append(Spacer(1, 0.1*inch))
+    
+    # Handle special metrics or scores
+    elif "Overall Score:" in clean_para or re.match(r'^[\d.]+%|[$€£¥][\d,.]+', clean_para):
+        metric_style = ParagraphStyle(
+            'Metric',
+            parent=styles['content'],
+            fontSize=11,
+            textColor=colors.HexColor('#2B6CB0'),
+            spaceAfter=6
+        )
+        elements.append(Paragraph(clean_para, metric_style))
+    
+    # Regular paragraphs
+    else:
+        elements.append(Paragraph(clean_para, styles['content']))
+        elements.append(Spacer(1, 0.05*inch))
 # Utility Functions
 def get_openai_response(prompt, system_content, api_key):
     """
@@ -111,7 +771,7 @@ def render_header():
     """Render application header"""
     col1, col2 = st.columns([3, 1])
     with col1:
-        logo_path = "smeimge.jpg"
+        logo_path = "Smeimge.jpg"
         if os.path.exists(logo_path):
             st.image(logo_path, width=100)
     with col2:
@@ -904,10 +1564,14 @@ def generate_pdf(sme_data, personal_info, toc_page_numbers):
     elements.append(PageBreak())
     
     # Main content sections
-    for title, content in section_data:
+
+    for i, (title, content) in enumerate(section_data):
         elements.append(Paragraph(title, styles['heading']))
-        process_content(content, styles, elements)
-        elements.append(PageBreak())
+        if content:
+            process_content(content, styles, elements)
+        # Only add page break if it's not the last section
+        if i < len(section_data) - 1:
+            elements.append(PageBreak())
     
     # Disclaimer
     elements.append(NextPageTemplate('dis'))
@@ -1019,23 +1683,20 @@ def create_header_footer(canvas, doc):
     
     if doc.page > 1:  # Only show on pages after the first page
         # Header logos positioning
-        x_start = doc.width + doc.leftMargin - 1.0 * inch
-        y_position = doc.height + doc.topMargin - 0.1 * inch
-        image_width = 0.5 * inch
+        x_start = doc.width + doc.leftMargin - 2.0 * inch
+        y_position = doc.height + doc.topMargin - 0.2 * inch
+        image_width = 2.0 * inch
         image_height = 0.5 * inch
-
-        # Draw logos if available
-        for img_name in ["ceai.png", "raa.png", "emma.png"]:
-            if os.path.exists(img_name):
-                canvas.drawImage(
-                    img_name,
-                    x_start - (image_width + 0.1 * inch),
-                    y_position,
-                    width=image_width,
-                    height=image_height,
-                    mask="auto"
-                )
-                x_start -= (image_width + 0.1 * inch)
+        
+        if os.path.exists("smeimge.jpg"):
+            canvas.drawImage(
+                "smeimge.jpg", 
+                x_start, 
+                y_position, 
+                width=image_width, 
+                height=image_height, 
+                mask="auto"
+            )
         
         # Get company name from business_profile if available
         if hasattr(doc, 'personal_info') and isinstance(doc.personal_info, dict):
@@ -1080,25 +1741,22 @@ def create_header_footer_disclaimer(canvas, doc):
     """Add header and footer for disclaimer page"""
     canvas.saveState()
     
-    if doc.page > 1:
+    if doc.page > 1:  # Only show on pages after the first page
         # Header logos positioning
-        x_start = doc.width + doc.leftMargin - 1.0 * inch
-        y_position = doc.height + doc.topMargin - 0.1 * inch
-        image_width = 0.5 * inch
+        x_start = doc.width + doc.leftMargin - 2.0 * inch
+        y_position = doc.height + doc.topMargin - 0.2 * inch
+        image_width = 2.0 * inch
         image_height = 0.5 * inch
-
-        # Draw logos
-        for img_name in ["ceai.png", "raa.png", "emma.png"]:
-            if os.path.exists(img_name):
-                canvas.drawImage(
-                    img_name,
-                    x_start - (image_width + 0.1 * inch),
-                    y_position,
-                    width=image_width,
-                    height=image_height,
-                    mask="auto"
-                )
-                x_start -= (image_width + 0.1 * inch)
+        
+        if os.path.exists("smeimge.jpg"):
+            canvas.drawImage(
+                "smeimge.jpg", 
+                x_start, 
+                y_position, 
+                width=image_width, 
+                height=image_height, 
+                mask="auto"
+            )
         
         # Header Text
         canvas.setFont("Helvetica-Bold", 27)
@@ -1134,7 +1792,6 @@ def create_header_footer_disclaimer(canvas, doc):
 
 def create_disclaimer_page(styles, elements):
     """Create disclaimer page content"""
-    # Register Lato fonts if available
     try:
         pdfmetrics.registerFont(TTFont('Lato', 'fonts/Lato-Regular.ttf'))
         pdfmetrics.registerFont(TTFont('Lato-Bold', 'fonts/Lato-Bold.ttf'))
@@ -1144,222 +1801,73 @@ def create_disclaimer_page(styles, elements):
         base_font = 'Helvetica'
         bold_font = 'Helvetica-Bold'
     
-    # Disclaimer styles
+    # Adjusted styles for more compact layout
     disclaimer_styles = {
         'section_header': ParagraphStyle(
             'SectionHeader',
             parent=styles['normal'],
-            fontSize=12,
+            fontSize=10,  # Reduced from 14
             fontName=bold_font,
-            spaceBefore=12,
-            spaceAfter=6,
+            spaceBefore=3,  # Reduced from 12
+            spaceAfter=2,
+            leading=12   # Reduced from 6
         ),
         'body_text': ParagraphStyle(
             'BodyText',
             parent=styles['normal'],
-            fontSize=10,
+            fontSize=8,  # Reduced from 10
             fontName=base_font,
-            leading=14,
-            alignment=TA_JUSTIFY
+            leading=9,  # Reduced from 12
+            alignment=TA_JUSTIFY,
+            spaceBefore=0,  # Minimal space before paragraphs
+            spaceAfter=1    
         )
     }
 
-    # Add disclaimer sections
-    elements.append(Paragraph("Report Disclaimer and Limitations", disclaimer_styles['section_header']))
-    
-    disclaimer_text = """
-    This report has been generated using artificial intelligence and data analysis tools. While we strive to provide accurate and helpful information, please note the following limitations:
+    # Introduction
+    elements.append(Paragraph("Introduction", disclaimer_styles['section_header']))
+    intro_text = """The increasing application of Artificial Intelligence (AI) in evaluating financial risks and business strategies reflects the growing trend towards data-driven decision-making. AI's ability to analyze vast datasets, identify patterns, and generate insights can significantly enhance the quality of financial and strategic evaluations. However, it is crucial to understand that AI tools, while powerful, have limitations and inherent risks. This disclaimer outlines the key considerations and limitations of using AI for such evaluations and clarifies the position of CapM and its advisory partners."""
+    elements.append(Paragraph(intro_text.strip(), disclaimer_styles['body_text']))
+    elements.append(Spacer(1, 0.04*inch))  # Reduced spacing
 
-    1. The analyses and recommendations provided are based on the information submitted and available at the time of generation.
-    2. Financial projections and business analyses should be used as guidance only and validated with professional advisors.
-    3. Market conditions and business environments can change rapidly, affecting the relevance of recommendations.
-    4. This report should not be considered as financial, legal, or professional advice.
-    5. Users should exercise their own judgment and consult with relevant professionals before making business decisions.
-    """
+    # Limitations section
+    elements.append(Paragraph("Limitations of AI in Financial and Strategic Evaluations", disclaimer_styles['section_header']))
     
-    elements.append(Paragraph(disclaimer_text, disclaimer_styles['body_text']))
-    elements.append(Spacer(1, 0.2*inch))
+    limitations = {
+        "1. Data Dependency and Quality": "AI models rely heavily on the quality and completeness of the data fed into them. The accuracy of the analysis is contingent upon the integrity of the input data. Inaccurate, outdated, or incomplete data can lead to erroneous conclusions and recommendations. Users should ensure that the data used in AI evaluations is accurate and up-to-date.",
+        "2. Algorithmic Bias and Limitations": "AI algorithms are designed based on historical data and pre-defined models. They may inadvertently incorporate biases present in the data, leading to skewed results. Additionally, AI models might not fully capture the complexity and nuances of human behavior or unexpected market changes, potentially impacting the reliability of the analysis.",
+        "3. Predictive Limitations": "While AI can identify patterns and trends, it cannot predict future events with certainty. Financial markets and business environments are influenced by numerous unpredictable factors such as geopolitical events, economic fluctuations, and technological advancements. AI's predictions are probabilistic and should not be construed as definitive forecasts.",
+        "4. Interpretation of Results": "AI-generated reports and analyses require careful interpretation. The insights provided by AI tools are based on algorithms and statistical models, which may not always align with real-world scenarios. It is essential to involve human expertise in interpreting AI outputs and making informed decisions.",
+        "5. Compliance and Regulatory Considerations": "The use of AI in financial evaluations and business strategy formulation must comply with relevant regulations and standards. Users should be aware of legal and regulatory requirements applicable to AI applications in their jurisdiction and ensure that their use of AI tools aligns with these requirements."
+    }
 
-    # Add confidentiality notice
-    elements.append(Paragraph("Confidentiality Notice", disclaimer_styles['section_header']))
-    
-    confidentiality_text = """
-    This document contains confidential and proprietary information. The content should not be shared or distributed without proper authorization. All rights reserved.
-    """
-    
-    elements.append(Paragraph(confidentiality_text, disclaimer_styles['body_text']))
-def process_content(content, styles, elements):
-    """Process content with proper formatting"""
-    if not content:
-        return
-    
-    # Handle case where content is a dictionary
-    if isinstance(content, dict):
-        for title, analysis in content.items():
-            elements.append(Paragraph(title, styles['subheading']))
-            if isinstance(analysis, str):
-                paragraphs = analysis.strip().split('\n')
-                for para in paragraphs:
-                    process_paragraph(para, styles, elements)
-            elements.append(Spacer(1, 0.2*inch))
-        return
+    for title, content in limitations.items():
+        elements.append(Paragraph(title, disclaimer_styles['section_header']))
+        elements.append(Paragraph(content.strip(), disclaimer_styles['body_text']))
+        elements.append(Spacer(1, 0.02*inch))  # Reduced spacing
 
-    # Define all possible section headers from various prompts
-    section_headers = [
-        "Company Profile Analysis",
-        "Industry Overview",
-        "SWOT Analysis",
-        "Financial and Operating Summary",
-        "Business Needs Analysis",
-        "Expanded Analysis",
-        "Synthesis and Organization",
-        "Practical Examples",
-        "Strategic Implications",
-        "Working Capital Planning",
-        "Amount vs Purpose Analysis",
-        "Risk Assessment",
-        "Benefits Analysis",
-        "Eligibility Status",
-        "Detailed Analysis of Unmet Criteria",
-        "Eligibility Score",
-        "Advisor/Coach Need Analysis",
-        "Targeted Solutions",
-        "KPI Timeline Breakdown",
-        "Benefits and Impact Analysis",
-        "Potential Impact on Financing Eligibility",
-        "Potential Challenges and Mitigation Strategies",
-        "Funding Request",
-        "Business Profile",
-        "Detailed Criteria Analysis",
-        "Financial Profile",
-        "Recommendations",
-        "Competitive Landscape",
-        "Industry Statistics and Benchmarks",
-        "Market Size and Trends",
-        "Working Planning Requirements Summary",
-        "Forward Looking Quote"
-    ]
+    # CapM Disclaimer section
+    elements.append(Paragraph("CapM and Advisory Partners' Disclaimer", disclaimer_styles['section_header']))
+    capm_intro = "CapM and its advisory partners provide AI-generated reports and insights as a tool to assist in financial and business strategy evaluations. However, the use of these AI-generated analyses is subject to the following disclaimers:"
+    elements.append(Paragraph(capm_intro.strip(), disclaimer_styles['body_text']))
+    elements.append(Spacer(1, 0.03*inch))  # Reduced spacing
 
-    # Split content into sections
-    sections = content.split('\n\n')
-    
-    for section in sections:
-        lines = section.strip().split('\n')
-        first_line = lines[0].strip()
-        
-        # Remove any Markdown formatting and special characters
-        first_line = re.sub(r'^[#\s*]+', '', first_line)  # Remove leading #, spaces, asterisks
-        first_line = re.sub(r'[\*:]$', '', first_line)    # Remove trailing asterisks and colons
-        first_line = first_line.strip()
-        
-        # Remove numbers at the start
-        first_line = re.sub(r'^\d+\.\s*', '', first_line)
-        
-        # Check if this is a header
-        is_header = any(header.lower() in first_line.lower() for header in section_headers)
-        
-        if is_header:
-            # Clean up the header text
-            header = first_line.strip()
-            # Remove any remaining special characters or formatting
-            header = re.sub(r'[*_:#]', '', header).strip()
-            
-            elements.append(Spacer(1, 0.2*inch))
-            elements.append(Paragraph(header, styles['subheading']))
-            elements.append(Spacer(1, 0.1*inch))
-            
-            # Process remaining lines in the section
-            if len(lines) > 1:
-                for para in lines[1:]:
-                    if para.strip():
-                        process_paragraph(para, styles, elements)
-        else:
-            # Process as regular paragraph
-            for para in lines:
-                if para.strip():
-                    process_paragraph(para, styles, elements)
-    
-    # Split content into sections
-    sections = content.split('\n\n')
-    in_table = False
-    table_data = []
-    
-    for section in sections:
-        lines = section.strip().split('\n')
-        if not lines:
-            continue
-            
-        # Check if this section contains a table
-        if any('|' in line for line in lines):
-            # Process table content
-            table_data = []
-            for line in lines:
-                if '|' in line and '-|-' not in line:  # Skip separator lines
-                    cells = [cell.strip() for cell in line.split('|')]
-                    # Remove empty cells from start/end
-                    cells = [cell for cell in cells if cell]
-                    if cells:  # Only add non-empty rows
-                        table_data.append(cells)
-            
-            if table_data:
-                # Create and format table
-                table = create_formatted_table(table_data, styles)
-                elements.append(Spacer(1, 0.2*inch))
-                elements.append(table)
-                elements.append(Spacer(1, 0.2*inch))
-            continue
-        
-        # Process non-table content
-        for line in lines:
-            if line.strip():
-                elements.append(Paragraph(line.strip(), styles['content']))
-                elements.append(Spacer(1, 0.1*inch))
+    disclaimers = {
+        "1. No Guarantee of Accuracy or Completeness": "While CapM and its advisory partners strive to ensure that the AI-generated reports and insights are accurate and reliable, we do not guarantee the completeness or accuracy of the information provided. The insights are based on the data and models used, which may not fully account for all relevant factors or changes in the market.",
+        "2. Not Financial or Professional Advice": "The AI-generated reports and insights are not intended as financial, investment, legal, or professional advice. Users should consult with qualified professionals before making any financial or strategic decisions based on AI-generated reports. CapM and its advisory partners are not responsible for any decisions made based on the reports provided.",
+        "3. Limitation of Liability": "CapM and its advisory partners shall not be liable for any loss or damage arising from the use of AI-generated reports and insights. This includes, but is not limited to, any direct, indirect, incidental, or consequential damages resulting from reliance on the reports or decisions made based on them.",
+        "4. No Endorsement of Third-Party Tools": "The use of third-party tools and data sources in AI evaluations is at the user's discretion. CapM and its advisory partners do not endorse or guarantee the performance or accuracy of any third-party tools or data sources used in conjunction with the AI-generated reports."
+    }
 
-    return elements
-def process_paragraph(para, styles, elements):
-    """Process individual paragraph with formatting"""
-    clean_para = clean_text(para)
-    if not clean_para:
-        return
-    
-    # Handle bullet points and dashes
-    if clean_para.startswith(('•', '-', '*')):
-        text = clean_para.lstrip('•-* ').strip()
-        elements.append(Paragraph(f"• {text}", styles['bullet']))
-    
-    # Handle numbered points
-    elif re.match(r'^\d+\.?\s+', clean_para):
-        text = re.sub(r'^\d+\.?\s+', '', clean_para)
-        elements.extend([
-            Spacer(1, 0.1*inch),
-            create_highlight_box(text, styles),
-            Spacer(1, 0.1*inch)
-        ])
-    
-    # Handle scores and metrics
-    elif "Overall Score:" in clean_para:
-        # Remove asterisks and preserve the score
-        text = clean_para.replace('**', '').strip()
-        elements.append(Paragraph(text, styles['content']))
-    
-    # Handle quoted text
-    elif clean_para.strip().startswith('"') and clean_para.strip().endswith('"'):
-        quote_style = ParagraphStyle(
-            'Quote',
-            parent=styles['content'],
-            fontSize=24,  # Increased from 18 to 24 for bigger text
-            leftIndent=20,
-            rightIndent=20,
-            leading=28,   # Increased leading (line height) to match larger font
-            textColor=colors.black  # Added to make text black
-        )
-        elements.append(Paragraph(clean_para, quote_style))
-        elements.append(Spacer(1, 0.1*inch))
-    
-    else:
-        # Normal black text for everything else
-        elements.append(Paragraph(clean_para, styles['content']))
-        elements.append(Spacer(1, 0.05*inch))
+    for title, content in disclaimers.items():
+        elements.append(Paragraph(title, disclaimer_styles['section_header']))
+        elements.append(Paragraph(content.strip(), disclaimer_styles['body_text']))
+        elements.append(Spacer(1, 0.02*inch))  # Reduced spacing
+
+    # Conclusion
+    elements.append(Paragraph("Conclusion", disclaimer_styles['section_header']))
+    conclusion_text = "AI provides valuable insights and enhances decision-making capabilities in financial risk assessment and business strategy development. However, users must recognize the limitations and risks associated with AI applications. CapM and its advisory partners emphasize the importance of combining AI-generated insights with professional judgment and expertise. Users should carefully consider the limitations outlined in this disclaimer and seek professional advice when making significant financial or strategic decisions."
+    elements.append(Paragraph(conclusion_text.strip(), disclaimer_styles['body_text']))
 def create_custom_styles():
     base_styles = getSampleStyleSheet()
     
@@ -1457,101 +1965,7 @@ def create_custom_styles():
     }
     
     return styles
-def create_formatted_table(table_data, styles):
-    """Create a professionally formatted table with consistent styling"""
-    from reportlab.lib import colors
-    from reportlab.platypus import Table, TableStyle
-    from reportlab.lib.units import inch
-    
-    # Ensure all rows have the same number of columns
-    max_cols = max(len(row) for row in table_data)
-    table_data = [row + [''] * (max_cols - len(row)) for row in table_data]
-    
-    # Calculate column widths based on content
-    total_width = 6.5 * inch  # Standard letter page width minus margins
-    if max_cols > 1:
-        # First column slightly narrower, remaining columns share space evenly
-        col_widths = [2*inch] + [(total_width - 2*inch)/(max_cols-1)] * (max_cols-1)
-    else:
-        col_widths = [total_width]
-    
-    # Create table with calculated widths
-    table = Table(table_data, colWidths=col_widths, repeatRows=1)
-    
-    # Define professional table style
-    style = TableStyle([
-        # Header row styling
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F3F4F6')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('TOPPADDING', (0, 0), (-1, 0), 12),
-        
-        # Content styling
-        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
-        ('TOPPADDING', (0, 1), (-1, -1), 10),
-        
-        # Grid styling
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-        
-        # Alignment
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        
-        # Cell padding
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-    ])
-    
-    # Apply word wrapping to all cells
-    for row in range(len(table_data)):
-        for col in range(len(table_data[0])):
-            if table_data[row][col]:
-                wrapped_text = Paragraph(table_data[row][col], styles['content'])
-                table_data[row][col] = wrapped_text
-    
-    table.setStyle(style)
-    return table
-def clean_text(text):
-    """Clean and format text by removing unwanted formatting"""
-    if not text:
-        return ""
-    
-    # Remove style tags
-    text = re.sub(r'<userStyle>.*?</userStyle>', '', text)
-    
-    # Remove Markdown formatting without affecting content
-    text = text.replace('**', '')  # Remove bold markers
-    text = text.replace('*', '')   # Remove italic markers
-    text = text.replace('_', '')   # Remove underscore
-    text = text.replace(':', ': ') # Add space after colons
-    
-    # Remove Markdown headers while preserving text
-    text = re.sub(r'^#+\s*', '', text)
-    
-    # Clean up multiple spaces and preserve paragraph structure
-    text = ' '.join(text.split())
-    
-    return text.strip()
 
-def create_highlight_box(text, styles):
-    """Create highlighted box with consistent styling"""
-    return Table(
-        [[Paragraph(f"• {text}", styles['content'])]],
-        colWidths=[6*inch],
-        style=TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F7FAFC')),
-            ('BORDER', (0,0), (-1,-1), 1, colors.HexColor('#90CDF4')),
-            ('PADDING', (0,0), (-1,-1), 12),
-            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ])
-    )
 # Main Function
 def main():
     initialize_session_state()
@@ -1632,10 +2046,6 @@ def main():
                             st.session_state.openai_api_key
                         )
                         if suggestion:
-                            # st.markdown("#### Overview")
-                            # st.markdown(f"*{BUSINESS_OPTIONS[option]}*")
-                            # st.markdown("#### Detailed Analysis")
-                            # st.markdown(suggestion)
                             st.session_state[f"{option.lower().replace(' ', '_')}_analysis"] = suggestion
 
                 executive_summary = get_business_option_summary(
@@ -1676,8 +2086,6 @@ def main():
             if strategic_analysis:
                 st.session_state["strategic_analysis"] = strategic_analysis
                 st.success("Strategic planning submitted successfully!")
-                # with st.expander("View Strategic Planning Analysis"):
-                #     st.markdown(strategic_analysis)
         else:
             st.stop()
 
@@ -1708,45 +2116,84 @@ def main():
         else:
             st.stop()
 
-    # Show Generate Report button only when all steps are completed
+    # Move the Generate Report section outside the growth projections block
     if all(key in st.session_state for key in [
-        "personal_profile", "business_profile", "business_priorities",
-        "business_options", "working_capital", "strategic_planning",
-        "growth_projections", "business_profile_analysis", "priorities_analysis",
-        "capital_analysis", "strategic_analysis", "financial_projections",
-        "executive_summary"
-    ]):
+            "personal_profile", "business_profile", "business_priorities",
+            "business_options", "working_capital", "strategic_planning",
+            "growth_projections", "business_profile_analysis", "priorities_analysis",
+            "capital_analysis", "strategic_analysis", "financial_projections",
+            "executive_summary"
+        ]):
         st.write("## Generate Final Report")
         if st.button("Generate Complete Report"):
-            with st.spinner("Generating PDF Report..."):
-# In the PDF generation section of main():
-                try:
-                    sme_data = {
-                        'business_profile_analysis': st.session_state['business_profile_analysis'],
-                        'priorities_analysis': st.session_state['priorities_analysis'],
-                        'executive_summary': st.session_state['executive_summary'],
-                        'capital_analysis': st.session_state['capital_analysis'],
-                        'strategic_analysis': st.session_state['strategic_analysis'],
-                        'financial_projections': st.session_state['financial_projections']
-                    }
-                    
-                    # Include company name in personal_info
-                    personal_info = st.session_state["personal_profile"].copy()
-                    personal_info['company_name'] = st.session_state.get('business_profile', {}).get('company_name', '')
-                    
-                    page_numbers = [4, 6, 8, 10, 12, 14]
+            try:
+                # Prepare data for PDF generation
+                sme_data = {
+                    'business_profile_analysis': st.session_state['business_profile_analysis'],
+                    'priorities_analysis': st.session_state['priorities_analysis'],
+                    'executive_summary': st.session_state['executive_summary'],
+                    'capital_analysis': st.session_state['capital_analysis'],
+                    'strategic_analysis': st.session_state['strategic_analysis'],
+                    'financial_projections': st.session_state['financial_projections']
+                }
+                
+                # Include company name in personal_info
+                personal_info = st.session_state["personal_profile"].copy()
+                personal_info['company_name'] = st.session_state.get('business_profile', {}).get('company_name', '')
+                
+                page_numbers = [4, 6, 8, 10, 12, 14]
+                
+                # Generate PDF with spinner
+                with st.spinner("Generating PDF report..."):
                     pdf_buffer = generate_pdf(sme_data, personal_info, page_numbers)
                     
-                    st.download_button(
-                        "📥 Download SME Analysis Report",
-                        data=pdf_buffer,
-                        file_name=f"sme_analysis_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-                        mime="application/pdf",
-                        help="Click to download your complete SME analysis report"
-                    )
-                except Exception as e:
-                    st.error(f"Error generating PDF: {str(e)}")
-                    print(f"Detailed error: {str(e)}")
+                    if pdf_buffer:
+                        st.success("PDF report generated successfully!")
+                        st.download_button(
+                            "📥 Download SME Analysis Report",
+                            data=pdf_buffer,
+                            file_name=f"sme_analysis_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                            mime="application/pdf",
+                            help="Click to download your complete SME analysis report"
+                        )
+                        
+                        # Calculate statistics and send email
+                        with st.spinner("Sending the report via email..."):
+                            analysis_statistics = calculate_analysis_statistics(st.session_state)
+                            
+                            # Get contact details from personal_info
+                            contact_details = f"""Contact Details:
+    Full Name: {personal_info.get('full_name', 'Not provided')}
+    Email: {personal_info.get('email', 'Not provided')}
+    Mobile: {personal_info.get('phone', 'Not provided')}"""
+
+                            # Send to user
+                            send_email_with_attachment(
+                                receiver_email=personal_info['email'],
+                                company_name=personal_info['company_name'],
+                                subject="SME Analysis Report",
+                                body="Please find attached your SME Analysis Report generated from SMEBoost Lite GenAI.",
+                                pdf_buffer=pdf_buffer,
+                                statistics=analysis_statistics,
+                                contact_details=contact_details
+                            )
+                            
+                            # Send copy to admin
+                            send_email_with_attachment(
+                                receiver_email=EMAIL_SENDER,
+                                company_name=personal_info['company_name'],
+                                subject="SME Analysis Report Copy",
+                                body="Copy of SME Analysis Report generated from SMEBoost Lite GenAI.",
+                                pdf_buffer=pdf_buffer,
+                                statistics=analysis_statistics,
+                                contact_details=contact_details
+                            )
+                    else:
+                        st.error("Failed to generate PDF report. Please try again.")
+                        
+            except Exception as e:
+                st.error(f"Error generating PDF: {str(e)}")
+                print(f"Detailed error: {str(e)}")
 
 if __name__ == "__main__":
     main()
