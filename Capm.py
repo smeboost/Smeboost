@@ -914,9 +914,9 @@ def render_business_options(business_priorities, openai_api_key):
                 st.session_state.user_data['business_priority_suggestions'] = suggestions
     
     if st.session_state.user_data.get('business_priority_suggestions'):
-        # with st.expander("Business Priority Suggestions", expanded=True):
-        #     st.write("Here are some business priority suggestions based on your input:")
-        #     st.markdown(st.session_state.user_data['business_priority_suggestions'])
+        with st.expander("Business Priority Suggestions", expanded=True):
+            st.write("Here are some business priority suggestions based on your input:")
+            st.markdown(st.session_state.user_data['business_priority_suggestions'])
     
     st.write("### Business Areas for Analysis")
     st.write("Based on your priorities, select the relevant business areas:")
