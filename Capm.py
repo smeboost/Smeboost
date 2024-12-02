@@ -2118,7 +2118,7 @@ def main():
                 personal_info = st.session_state["personal_profile"].copy()
                 personal_info['company_name'] = st.session_state.get('business_profile', {}).get('company_name', '')
                 
-                page_numbers = [4, 6, 8, 10, 12, 14]
+                page_numbers = [4, 8, 10, 14, 19, 22]
                 
                 # Generate PDF with spinner
                 with st.spinner("Generating PDF report..."):
