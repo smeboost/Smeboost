@@ -355,7 +355,6 @@ def create_formatted_table(table_data, styles):
     from reportlab.lib import colors
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib.units import inch
-    
     # Ensure all rows have the same number of columns
     max_cols = max(len(row) for row in table_data)
     table_data = [row + [''] * (max_cols - len(row)) for row in table_data]
@@ -477,8 +476,8 @@ def create_highlight_box(text, styles):
         [[Paragraph(f"• {text}", styles['content'])]],
         colWidths=[6*inch],
         style=TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F3F8FF')),  # Light blue
-            ('BORDER', (0,0), (-1,-1), 1, colors.HexColor('#2B6CB0')),   # Blue border
+            ('BACKGROUND', (0,0), (-1,-1), colors.white),  # Light blue
+            ('BORDER', (0,0), (-1,-1), 1, colors.black),   # Blue border
             ('PADDING', (0,0), (-1,-1), 15),
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
             ('ROUNDEDCORNERS', [5, 5, 5, 5]),  # Rounded corners
@@ -509,41 +508,7 @@ def process_content(content, styles, elements):
 
     # Define all possible section headers
     section_headers = [
-        "Company Profile Analysis",
-        "Industry Overview",
-        "SWOT Analysis",
-        "Financial and Operating Summary",
-        "Business Needs Analysis",
-        "Expanded Analysis",
-        "Synthesis and Organization",
-        "Practical Examples",
-        "Strategic Implications",
-        "Working Capital Planning",
-        "Amount vs Purpose Analysis",
-        "Risk Assessment",
-        "Benefits Analysis",
-        "Eligibility Status",
-        "Detailed Analysis of Unmet Criteria",
-        "Eligibility Score",
-        "Advisor/Coach Need Analysis",
-        "Targeted Solutions",
-        "KPI Timeline Breakdown",
-        "Benefits and Impact Analysis",
-        "Potential Impact on Financing Eligibility",
-        "Potential Challenges and Mitigation Strategies",
-        "Funding Request",
-        "Business Profile",
-        "Detailed Criteria Analysis",
-        "Financial Profile",
-        "Recommendations",
-        "Competitive Landscape",
-        "Industry Statistics and Benchmarks",
-        "Market Size and Trends",
-        "Working Planning Requirements Summary",
-        "Forward Looking Quote",
-        "Implementation Strategy",
-        "Summary Points Table",
-        "Growth Assumptions Narrative"
+
     ]
 
     # Split content into sections while preserving structure
@@ -570,8 +535,7 @@ def process_content(content, styles, elements):
         if any('|' in line for line in lines) and not in_table:
             # Process table content
             table_data = []
-            header_processed = False
-            
+            header_processed = False            
             for line in lines:
                 if '|' in line:
                     if '-|-' in line:  # Skip separator lines
@@ -1197,6 +1161,7 @@ def process_business_profile_with_gpt(form_data, api_key):
     2. Section header: dedicate and force 2 pages only per section.. means all the sub sections force to 2 pages for that section: 1500 words
     3. Dedicate 1 extra page for that section with a summary table of the key point
     That summary table comes with a basic explanation in 200 words.
+    Pleas  organize the contnet for each part
     """
     return get_openai_response(
         prompt,
@@ -1220,6 +1185,7 @@ def process_business_priorities_with_gpt(form_data, api_key):
     2. Section header: dedicate and force 2 pages only per section.. means all the sub sections force to 2 pages for that section: 1500 words
     3. Dedicate 1 extra page for that section with a summary table of the key point
     That summary table comes with a basic explanation in 200 words.
+    Please add subheading  organize the contnet for each part
     """
     return get_openai_response(
         prompt,
@@ -1262,7 +1228,9 @@ Please provide a comprehensive 450-word analysis with the following structure:
 Include supporting facts and figures throughout the analysis to validate recommendations and insights.
 Ensure all sections include supporting facts, figures, and relevant industry statistics where applicable. 
 The analysis should be data-driven and provide actionable insights.
-Format all numerical examples in plain text with proper spacing no numbering point"""
+Format all numerical examples in plain text with proper spacing no numbering point
+Please add subheading  organize the contnet for each part
+"""
 
     return get_openai_response(
         prompt,
@@ -1284,7 +1252,9 @@ Provide a {suggestion_type} analysis with exactly these requirements (Maximum 20
 
 Ensure all sections include supporting facts, figures, and relevant industry statistics where applicable. 
 The analysis should be data-driven and provide actionable insights.
-Format all numerical examples in plain text with proper spacing no numbering point"""
+Format all numerical examples in plain text with proper spacing no numbering point
+Please add subheading  organize the contnet for each part
+"""
 
     return get_openai_response(
         prompt,
@@ -1320,6 +1290,7 @@ def process_working_capital_with_gpt(form_data, api_key):
     2. Section header: dedicate and force 2 pages only per section.. means all the sub sections force to 2 pages for that section: 1500 words
     3. Dedicate 1 extra page for that section with a summary table of the key point
     That summary table comes with a basic explanation in 200 words.
+    Please add subheading  organize the contnet for each part
     """
     
     return get_openai_response(
@@ -1363,6 +1334,7 @@ def process_strategic_planning_with_gpt(form_data, api_key):
     2. Section header: dedicate and force 2 pages only per section.. means all the sub sections force to 2 pages for that section: 1500 words
     3. Dedicate 1 extra page for that section with a summary table of the key point
     That summary table comes with a basic explanation in 200 words.
+    Please add subheading  organize the contnet for each part
     """
     
     return get_openai_response(
@@ -1392,6 +1364,8 @@ def process_financial_projections_with_gpt(form_data, company_data, api_key):
     Create a table based on these financial projections and data provided earlier - using both qualitative and quantitative data provided. 
     Link these numbers to the business strategy of the company.
     State and explain the growth assumptions narratively in 700 words with supporting facts, figures in % and $ terms, with reference to time frame. 
+    Please add subheading  organize the contnet for each part
+
     """
     return get_openai_response(
         prompt,
@@ -1433,7 +1407,9 @@ def get_business_option_summary(selected_areas, suggestions_data, openai_api_key
     1..main header comes w summary for that section : 600 words. 
     2. Section header: dedicate and force 2 pages only per section.. means all the sub sections force to 2 pages for that section: 1500 words
     3. Dedicate 1 extra page for that section with a summary table of the key points
-    That summary table comes with a basic explanation in 200 words"""
+    That summary table comes with a basic explanation in 200 words
+    Please add subheading  organize the content for each part
+"""
 
     return get_openai_response(
         prompt,
@@ -1620,8 +1596,9 @@ def create_profile_page(styles, personal_info):
                     ["Full Name", str(personal_info.get('full_name', 'N/A'))],
                     ["Email", str(personal_info.get('email', 'N/A'))],
                     ["Phone", str(personal_info.get('phone', 'N/A'))],
-                    ["Report Date", datetime.datetime.now().strftime('%B %d, %Y')],
-                    ["Report ID", f"SME-{str(uuid.uuid4())[:8]}"]
+                    ["Report Date", datetime.datetime.now().strftime('%B %d, %Y at %I:%M %p')],
+                    ["Report ID", f"SME-{str(uuid.uuid4())[:8]}"],
+                    ["Status",f"POC"]
                 ],
                 colWidths=[1.5*inch, 4.5*inch],
                 style=TableStyle([
