@@ -1579,6 +1579,7 @@ def process_financial_projections_with_gpt(form_data, company_data, api_key):
     Operating Cashflow Range: {company_data['business_profile'].get('operating_cashflow')}
     Debt/Equity Ratio: {company_data['business_profile'].get('debt_equity_ratio')}
     Shareholder's Funds Levels: {company_data['business_profile'].get('shareholders_funds')}
+    Currency:{company_data['business_profile'].get('primary_currency')}
     Growth Rate Selected: {form_data['growth_rate']}
 
     Please extrapolate and provide detailed 5-year financial projections with the following requirements:
