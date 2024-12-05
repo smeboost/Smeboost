@@ -976,12 +976,12 @@ def render_business_profile_form():
         
         business_model = st.text_area(
             "Describe how your company makes money (max 150 words)",
-            max_chars=150
+            max_chars=900
         )
         
         products_services = st.text_area(
             "Describe your products/services (max 150 words)",
-            max_chars=150
+            max_chars=900
         )
         
         industry = st.selectbox(
@@ -1119,7 +1119,7 @@ def render_business_priority_form():
     with st.form(key="business_priority_form"):
         business_priorities = st.text_area(
             "Tell me more about your business priorities in the next 6 - 12 months (User Maximum 180 words)",
-            max_chars=180,
+            max_chars=1000,
             height=200
         )
         
