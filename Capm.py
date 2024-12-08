@@ -197,6 +197,42 @@ def generate_excel_report(session_state):
         
         ws_projections.set_column(0, 0, 20)
         ws_projections.set_column(1, 1, 30)
+
+    # Taxation Planning Sheet
+    if 'taxation_module' in session_state:
+        ws_tax = workbook.add_worksheet('Taxation Planning')
+        tax_data = session_state['taxation_module']
+        
+        headers = ['Section', 'Question', 'Response']
+        ws_tax.write_row(0, 0, headers, header_format)
+        
+        row = 1
+        tax_sections = {
+            'Strategic Tax Planning': 'strategic_tax_planning',
+            'Tactical Tax Planning': 'tactical_tax_planning',
+            'Compliance Tax Planning': 'compliance_tax_planning',
+            'Investment Tax Planning': 'investment_tax_planning',
+            'Deductions and Exemptions': 'deductions_exemptions',
+            'Income Structuring': 'income_structuring',
+            'Tax Incentives': 'tax_incentives',
+            'Global Tax Planning': 'global_tax_planning',
+            'Deferral Strategies': 'deferral_strategies',
+            'Estate Planning': 'estate_planning'
+        }
+        
+        for section_name, section_key in tax_sections.items():
+            if section_key in tax_data:
+                section_data = tax_data[section_key]
+                for question, answer in section_data.items():
+                    ws_tax.write(row, 0, section_name, cell_format)
+                    ws_tax.write(row, 1, question.replace('_', ' ').title(), cell_format)
+                    ws_tax.write(row, 2, str(answer), cell_format)
+                    row += 1
+        
+        # Set column widths
+        ws_tax.set_column(0, 0, 25)  # Section column
+        ws_tax.set_column(1, 1, 40)  # Question column
+        ws_tax.set_column(2, 2, 50)  # Response column
     
     workbook.close()
     output.seek(0)
@@ -618,10 +654,8 @@ def create_ascii_table(headers, rows, column_widths=None):
     ])
 
     return table
-def send_combined_email_with_attachments(receiver_email, company_name, subject, body, pdf_buffer, excel_buffer, statistics, contact_details):
-    """
-    Send email with both PDF and Excel report attachments using ceaiglobal.com email
-    """
+def send_combined_email_with_attachments(receiver_email, company_name, subject, body, pdf_buffer, excel_buffer, statistics, contact_details, tax_pdf_buffer):
+    """Send email with Business PDF, Tax PDF, and Excel report attachments"""
     try:
         # Log attempt
         logging.info(f"Attempting to send email to: {receiver_email}")
@@ -665,40 +699,42 @@ CEAI Business Analysis Team"""
         # Attach the formatted body
         msg.attach(MIMEText(formatted_body, 'plain'))
 
-        # Prepare and attach PDF
-        pdf_attachment = MIMEBase('application', 'octet-stream')
-        pdf_attachment.set_payload(pdf_buffer.getvalue())
-        encoders.encode_base64(pdf_attachment)
-        
-        # Create sanitized filename for PDF
+        # Helper function to create attachments
+        def create_pdf_attachment(pdf_data, filename):
+            pdf_attachment = MIMEBase('application', 'octet-stream')
+            pdf_attachment.set_payload(pdf_data.getvalue())
+            encoders.encode_base64(pdf_attachment)
+            pdf_attachment.add_header(
+                'Content-Disposition',
+                f'attachment; filename="{filename}"'
+            )
+            return pdf_attachment
+
+        # Create sanitized company name for filenames
         sanitized_company_name = "".join(x for x in company_name if x.isalnum() or x in (' ', '-', '_')).strip()
-        pdf_filename = f"business_analysis_{sanitized_company_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-        
-        pdf_attachment.add_header(
-            'Content-Disposition',
-            f'attachment; filename="{pdf_filename}"'
-        )
-        msg.attach(pdf_attachment)
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M')
+
+        # Attach Business Analysis PDF
+        business_pdf_filename = f"business_analysis_{sanitized_company_name}_{timestamp}.pdf"
+        msg.attach(create_pdf_attachment(pdf_buffer, business_pdf_filename))
+
+        # Attach Tax Analysis PDF
+        tax_pdf_filename = f"tax_analysis_{sanitized_company_name}_{timestamp}.pdf"
+        msg.attach(create_pdf_attachment(tax_pdf_buffer, tax_pdf_filename))
 
         # Prepare and attach Excel
         excel_attachment = MIMEBase('application', 'octet-stream')
         excel_attachment.set_payload(excel_buffer.getvalue())
         encoders.encode_base64(excel_attachment)
-        
-        # Create filename for Excel
-        excel_filename = f"business_analysis_input_{sanitized_company_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-        
+        excel_filename = f"business_analysis_input_{sanitized_company_name}_{timestamp}.xlsx"
         excel_attachment.add_header(
             'Content-Disposition',
             f'attachment; filename="{excel_filename}"'
         )
         msg.attach(excel_attachment)
 
-        # Create SSL context
+        # Create SSL context and send email
         context = ssl.create_default_context()
-        
-        # Attempt to send email
-        logging.info("Connecting to SMTP server...")
         try:
             # Try SSL first (port 465)
             with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
@@ -713,7 +749,7 @@ CEAI Business Analysis Team"""
                 server.starttls(context=context)
                 server.login(EMAIL_SENDER, EMAIL_PASSWORD)
                 server.send_message(msg)
-                
+
         st.success(f"Reports sent successfully to {receiver_email} for {company_name}.")
         logging.info(f"Email sent successfully to {receiver_email}")
         
@@ -721,7 +757,7 @@ CEAI Business Analysis Team"""
         error_msg = f"Error sending email: {str(e)}"
         logging.error(error_msg, exc_info=True)
         st.error(error_msg)
-        print(f"Detailed email error: {str(e)}")  # For debugging# For debugging
+        print(f"Detailed email error: {str(e)}") # For debugging# For debugging
 def calculate_analysis_statistics(session_state):
     """
     Calculate word and token counts for input and output separately.
@@ -976,12 +1012,12 @@ def render_business_profile_form():
         
         business_model = st.text_area(
             "Describe how your company makes money (max 150 words)",
-            max_chars=900
+            max_chars=850
         )
         
         products_services = st.text_area(
             "Describe your products/services (max 150 words)",
-            max_chars=900
+            max_chars=850
         )
         
         industry = st.selectbox(
@@ -1119,7 +1155,7 @@ def render_business_priority_form():
     with st.form(key="business_priority_form"):
         business_priorities = st.text_area(
             "Tell me more about your business priorities in the next 6 - 12 months (User Maximum 180 words)",
-            max_chars=1000,
+            max_chars=1080,
             height=200
         )
         
@@ -1591,7 +1627,7 @@ def process_financial_projections_with_gpt(form_data, company_data, api_key):
     *Model Illustration*
     -Create a summary table with a basic explanation based on the above using qualitative and quantitative provide(must be in table format)
     Link these numbers and explain the numbers with the business strategy, neeeds and priorities of the company provided earlier.
-    State and explain the growth assumptions narratively in 700 words with supporting facts, figures in % and $ terms, with reference to time frame. 
+    State and explain the growth assumptions narratively in 700 words with supporting facts, figures in % and $ terms , with reference to time frame. 
     Please add subheading  organize the contnet for each part
 
     """
@@ -1692,7 +1728,8 @@ class PDFWithTOC(SimpleDocTemplate):
                 text = flowable.getPlainText()
                 self.page_numbers[text] = self.current_page
 
-def generate_pdf(sme_data, personal_info, toc_page_numbers):
+def generate_main_pdf(sme_data, personal_info, toc_page_numbers):
+    """Generate the main business analysis PDF (up to financial projections)"""
     buffer = io.BytesIO()
     
     doc = PDFWithTOC(
@@ -1705,34 +1742,12 @@ def generate_pdf(sme_data, personal_info, toc_page_numbers):
         personal_info=personal_info
     )
     
-    full_page_frame = Frame(
-        0, 0, letter[0], letter[1],
-        leftPadding=0, rightPadding=0,
-        topPadding=0, bottomPadding=0
-    )
-    
-    normal_frame = Frame(
-        doc.leftMargin,
-        doc.bottomMargin,
-        doc.width,
-        doc.height,
-        id='normal'
-    )
-    
-    disclaimer_frame = Frame(
-        doc.leftMargin,
-        doc.bottomMargin,
-        doc.width,
-        doc.height,
-        id='disclaimer'
-    )
-    
     templates = [
-        PageTemplate(id='First', frames=[full_page_frame],
+        PageTemplate(id='First', frames=[Frame(0, 0, letter[0], letter[1], leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)],
                     onPage=lambda canvas, doc: None),
-        PageTemplate(id='Later', frames=[normal_frame],
+        PageTemplate(id='Later', frames=[Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal')],
                     onPage=create_header_footer),
-        PageTemplate(id='dis', frames=[normal_frame],
+        PageTemplate(id='dis', frames=[Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal')],
                     onPage=create_header_footer_disclaimer)
     ]
     doc.addPageTemplates(templates)
@@ -1752,13 +1767,13 @@ def generate_pdf(sme_data, personal_info, toc_page_numbers):
     # Table of Contents
     elements.append(Paragraph("Table of Contents", styles['heading']))
     
-    # Section data
+    # Section data for main PDF
     section_data = [
         ("Company Profile Analysis", sme_data['business_profile_analysis']),
         ("Business Priorities Analysis", sme_data['priorities_analysis']),
         ("Business Options Summary", sme_data['executive_summary']),
         ("Working Capital Analysis", sme_data['capital_analysis']),
-        # ("Strategic Planning Analysis", sme_data['strategic_analysis']),
+        ("Strategic Planning Analysis", sme_data['strategic_analysis']),
         ("Financial Projections", sme_data['financial_projections'])
     ]
     
@@ -1776,18 +1791,13 @@ def generate_pdf(sme_data, personal_info, toc_page_numbers):
     )
     styles['toc'] = toc_style
 
-    def create_toc_entry(num, title, page_num):
-        title_with_num = f"{num}. {title}"
-        dots = '.' * (50 - len(title_with_num))
-        return f"{title_with_num} {dots} {page_num}"
-
-    # Add static Personal Profile entry
-    static_entry = create_toc_entry(1, "Personal Profile", 3)
+    # Add static Personal Profile entry and other TOC entries
+    static_entry = f"1. Personal Profile........................ 3"
     elements.append(Paragraph(static_entry, toc_style))
-
-    # Add dynamic entries for other sections
+    
     for i, ((title, _), page_num) in enumerate(zip(section_data, toc_page_numbers), 2):
-        toc_entry = create_toc_entry(i, title, page_num)
+        dots = '.' * (50 - len(f"{i}. {title}"))
+        toc_entry = f"{i}. {title} {dots} {page_num}"
         elements.append(Paragraph(toc_entry, toc_style))
     
     elements.append(PageBreak())
@@ -1797,21 +1807,102 @@ def generate_pdf(sme_data, personal_info, toc_page_numbers):
     elements.append(PageBreak())
     
     # Main content sections
-
     for i, (title, content) in enumerate(section_data):
         elements.append(Paragraph(title, styles['heading']))
         if content:
             process_content(content, styles, elements)
-        # Only add page break if it's not the last section
         if i < len(section_data) - 1:
             elements.append(PageBreak())
     
-    # Disclaimer
+    # Disclaimer and back cover
     elements.append(NextPageTemplate('dis'))
     elements.append(PageBreak())
     create_disclaimer_page(styles, elements)
     
-    # Back cover
+    elements.append(NextPageTemplate('First'))
+    elements.append(PageBreak())
+    if os.path.exists("smeboostback.png"):
+        img = Image("smeboostback.png", width=letter[0], height=letter[1])
+        elements.append(img)
+    
+    doc.build(elements, canvasmaker=NumberedCanvas)
+    buffer.seek(0)
+    return buffer
+
+def generate_tax_pdf(tax_data, personal_info, toc_page_numbers):
+    """Generate the tax analysis PDF"""
+    buffer = io.BytesIO()
+    
+    doc = PDFWithTOC(
+        buffer,
+        pagesize=letter,
+        rightMargin=inch,
+        leftMargin=inch,
+        topMargin=1.5*inch,
+        bottomMargin=inch,
+        personal_info=personal_info
+    )
+    
+    templates = [
+        PageTemplate(id='First', frames=[Frame(0, 0, letter[0], letter[1], leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)],
+                    onPage=lambda canvas, doc: None),
+        PageTemplate(id='Later', frames=[Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal')],
+                    onPage=create_header_footer),
+        PageTemplate(id='dis', frames=[Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='normal')],
+                    onPage=create_header_footer_disclaimer)
+    ]
+    doc.addPageTemplates(templates)
+    
+    styles = create_custom_styles()
+    elements = []
+    
+    # Cover page
+    elements.append(NextPageTemplate('First'))
+    if os.path.exists("smeboostfront.jpg"):
+        img = Image("smeboostfront.jpg", width=letter[0], height=letter[1])
+        elements.append(img)
+    
+    elements.append(NextPageTemplate('Later'))
+    elements.append(PageBreak())
+    
+    # Table of Contents
+    elements.append(Paragraph("Tax Analysis Contents", styles['heading']))
+    
+    # Tax section data
+    section_data = [
+        ("Strategic Tax Planning", tax_data['strategic_tax']),
+        ("Tactical Tax Planning", tax_data['tactical_tax']),
+        ("Tax Compliance Analysis", tax_data['compliance_tax']),
+        ("Investment Tax Planning", tax_data['investment_tax']),
+        ("Deductions and Exemptions", tax_data['deductions_tax']),
+        ("Income Structuring", tax_data['income_tax']),
+        ("Tax Incentives", tax_data['incentives_tax']),
+        ("Global Tax Planning", tax_data['global_tax']),
+        ("Deferral Strategies", tax_data['deferral_tax']),
+        ("Estate and Succession Planning", tax_data['estate_tax'])
+    ]
+    
+    # Format TOC entries
+    for i, ((title, _), page_num) in enumerate(zip(section_data, toc_page_numbers), 1):
+        dots = '.' * (50 - len(f"{i}. {title}"))
+        toc_entry = f"{i}. {title} {dots} {page_num}"
+        elements.append(Paragraph(toc_entry, styles['toc']))
+    
+    elements.append(PageBreak())
+    
+    # Tax content sections
+    for i, (title, content) in enumerate(section_data):
+        elements.append(Paragraph(title, styles['heading']))
+        if content:
+            process_content(content, styles, elements)
+        if i < len(section_data) - 1:
+            elements.append(PageBreak())
+    
+    # Disclaimer and back cover
+    elements.append(NextPageTemplate('dis'))
+    elements.append(PageBreak())
+    create_disclaimer_page(styles, elements)
+    
     elements.append(NextPageTemplate('First'))
     elements.append(PageBreak())
     if os.path.exists("smeboostback.png"):
@@ -2097,7 +2188,1036 @@ def create_disclaimer_page(styles, elements):
     elements.append(Paragraph("Conclusion", disclaimer_styles['section_header']))
     conclusion_text = "AI provides valuable insights and enhances decision-making capabilities in financial risk assessment and business strategy development. However, users must recognize the limitations and risks associated with AI applications. CapM and its advisory partners emphasize the importance of combining AI-generated insights with professional judgment and expertise. Users should carefully consider the limitations outlined in this disclaimer and seek professional advice when making significant financial or strategic decisions."
     elements.append(Paragraph(conclusion_text.strip(), disclaimer_styles['body_text']))
+def render_taxation_module_form():
+    """Render the complete taxation module form with all 10 sections"""
+    st.write("### Taxation Module")
+    
+    with st.form(key="taxation_module_form"):
+        # Section 6.1: Strategic Tax Planning
+        st.write("#### 6.1 Strategic Tax Planning")
+        
+        expansion_plans = st.radio(
+            "Have you recently expanded or plan to expand operations into new markets or jurisdictions?",
+            options=[
+                "Yes, already expanded to new markets",
+                "Yes, planning to expand within 12 months",
+                "No, not applicable"
+            ],
+            key="expansion_plans"
+        )
+        
+        tax_friendly_jurisdiction = st.radio(
+            "Are you operating or considering operating in tax-friendly jurisdictions like Labuan or Free Trade Zones?",
+            options=[
+                "Operating in a tax-friendly jurisdiction",
+                "Yes, considering operating in Labuan/Free Trade Zones",
+                "No, not applicable"
+            ],
+            key="tax_friendly_jurisdiction"
+        )
+        
+        restructuring = st.radio(
+            "Have you restructured or considered restructuring your business ownership in the past year?",
+            options=[
+                "Currently in restructuring",
+                "Yes, actively restructured",
+                "No, no restructuring"
+            ],
+            key="restructuring"
+        )
+        
+        acquisitions = st.radio(
+            "Are there planned acquisitions or mergers in the next 12 months?",
+            options=[
+                "Ongoing for businesses",
+                "Yes, exploratory discussions ongoing",
+                "No, not applicable"
+            ],
+            key="acquisitions"
+        )
+        
+        capital_expenditure = st.radio(
+            "Are you planning significant capital expenditure in the next fiscal year?",
+            options=[
+                "Yes, approved expenditure > RM 1 million",
+                "Yes, considering expenditure < RM 1 million",
+                "No, not applicable"
+            ],
+            key="capital_expenditure"
+        )
 
+        # Section 6.2: Tactical Tax Planning
+        st.write("#### 6.2 Tactical Tax Planning")
+        
+        equipment_purchase = st.radio(
+            "Did your business purchase significant equipment or assets this year?",
+            options=[
+                "Yes, purchased equipment > RM 1 million",
+                "Yes, purchased equipment < RM 1 million",
+                "No, no equipment purchased"
+            ],
+            key="equipment_purchase"
+        )
+        
+        advanced_payments = st.radio(
+            "Have you utilized advanced payments or pre-year-end expenses for tax deductions?",
+            options=[
+                "Yes, fully utilized for the current year",
+                "Yes, partially utilized",
+                "No, not applicable"
+            ],
+            key="advanced_payments"
+        )
+        
+        operational_expenses = st.radio(
+            "Did you accelerate any operational expenses to reduce taxable income?",
+            options=[
+                "Yes, fully aligned with tax planning",
+                "Yes, but missed some opportunities",
+                "No, no expenses accelerated"
+            ],
+            key="operational_expenses"
+        )
+
+        # Section 6.3: Compliance Tax Planning
+        st.write("#### 6.3 Compliance Tax Planning")
+        
+        tax_filing_deadlines = st.radio(
+            "Have you missed any tax filing deadlines in the past year?",
+            options=[
+                "Yes, multiple deadlines missed",
+                "Yes, one deadline missed",
+                "No, all submissions on time"
+            ],
+            key="tax_filing_deadlines"
+        )
+        
+        audit_notices = st.radio(
+            "Have you received any audit notices or inquiries from tax authorities?",
+            options=[
+                "Yes, frequently audited",
+                "Yes, once in the past year",
+                "No, not audited"
+            ],
+            key="audit_notices"
+        )
+        
+        # Section 6.4: Investment Based Tax Planning
+        st.write("#### 6.4 Investment Based Tax Planning")
+        
+        tax_exempt_investments = st.radio(
+            "Did your business invest in tax-exempt financial instruments like sukuk bonds?",
+            options=[
+                "Yes, investments > RM 500,000",
+                "Yes, investments < RM 500,000",
+                "No such investment"
+            ],
+            key="tax_exempt_investments"
+        )
+        
+        employee_retirement = st.radio(
+            "Have you contributed to employee retirement funds (e.g., EPF)?",
+            options=[
+                "Yes, contributions meet statutory requirements",
+                "Yes, partial compliance",
+                "No, no contributions made"
+            ],
+            key="employee_retirement"
+        )
+        
+        # Section 6.5: Deduction and Exemptions
+        st.write("#### 6.5 Deduction and Exemptions")
+        
+        rd_deductions = st.radio(
+            "Have you claimed all eligible deductions for R&D expenditures?",
+            options=[
+                "Yes, fully claimed",
+                "Yes, partially claimed",
+                "No, not applicable"
+            ],
+            key="rd_deductions"
+        )
+        
+        charitable_donations = st.radio(
+            "Did you make approved charitable donations?",
+            options=[
+                "Yes, > RM 100,000 in donations",
+                "Yes, < RM 100,000 in donations",
+                "No, no donations made"
+            ],
+            key="charitable_donations"
+        )
+        
+        # Section 6.6: Income Splitting and Structuring
+        st.write("#### 6.6 Income Splitting and Structuring")
+        
+        dividend_distribution = st.radio(
+            "Did you distribute dividends or profits to directors or shareholders this year?",
+            options=[
+                "Yes, significant amounts > RM 500,000",
+                "Yes, smaller amounts < RM 500,000",
+                "No, no distributions made"
+            ],
+            key="dividend_distribution"
+        )
+
+        # Section 6.7: Tax Incentives and Reliefs Utilization
+        st.write("#### 6.7 Tax Incentives and Reliefs Utilization")
+        
+        sme_tax_rates = st.radio(
+            "Does your business qualify for SME tax rates?",
+            options=[
+                "Yes, below the RM 50 million threshold",
+                "No, exceeds revenue limits"
+            ],
+            key="sme_tax_rates"
+        )
+        
+        # Section 6.8: Global Tax Planning
+        st.write("#### 6.8 Global Tax Planning")
+        
+        double_taxation = st.radio(
+            "Have you utilized double taxation relief under applicable DTAs?",
+            options=[
+                "Yes, fully utilized",
+                "Yes, partially utilized",
+                "No, not applicable"
+            ],
+            key="double_taxation"
+        )
+        
+        # Section 6.9: Deferral Strategies
+        st.write("#### 6.9 Deferral Strategies")
+        
+        revenue_deferral = st.radio(
+            "Have you deferred any revenue recognition to the next fiscal year?",
+            options=[
+                "Yes, significant amounts > RM 500,000 deferred",
+                "Yes, smaller amounts < RM 500,000 deferred",
+                "No, no deferrals made"
+            ],
+            key="revenue_deferral"
+        )
+        
+        # Section 6.10: Estate and Succession Tax Planning
+        st.write("#### 6.10 Estate and Succession Tax Planning")
+        
+        ownership_transfer = st.radio(
+            "Are you planning to transfer ownership of the business to future generations?",
+            options=[
+                "Yes, confirmed",
+                "Yes, exploring options",
+                "No, not applicable"
+            ],
+            key="ownership_transfer"
+        )
+
+        submit = st.form_submit_button("Submit Tax Planning Information")
+        
+        if submit:
+            return {
+                "strategic_tax_planning": {
+                    "expansion_plans": expansion_plans,
+                    "tax_friendly_jurisdiction": tax_friendly_jurisdiction,
+                    "restructuring": restructuring,
+                    "acquisitions": acquisitions,
+                    "capital_expenditure": capital_expenditure
+                },
+                "tactical_tax_planning": {
+                    "equipment_purchase": equipment_purchase,
+                    "advanced_payments": advanced_payments,
+                    "operational_expenses": operational_expenses
+                },
+                "compliance_tax_planning": {
+                    "tax_filing_deadlines": tax_filing_deadlines,
+                    "audit_notices": audit_notices
+                },
+                "investment_tax_planning": {
+                    "tax_exempt_investments": tax_exempt_investments,
+                    "employee_retirement": employee_retirement
+                },
+                "deductions_exemptions": {
+                    "rd_deductions": rd_deductions,
+                    "charitable_donations": charitable_donations
+                },
+                "income_structuring": {
+                    "dividend_distribution": dividend_distribution
+                },
+                "tax_incentives": {
+                    "sme_tax_rates": sme_tax_rates
+                },
+                "global_tax_planning": {
+                    "double_taxation": double_taxation
+                },
+                "deferral_strategies": {
+                    "revenue_deferral": revenue_deferral
+                },
+                "estate_planning": {
+                    "ownership_transfer": ownership_transfer
+                }
+            }
+    return None
+def process_strategic_tax_planning(data, business_context, api_key):
+    # Analyze expansion plans
+    expansion_prompt = f"""
+    Based on the response: {data.get('expansion_plans')}
+    
+    Business Context:
+    - Current Industry: {business_context['profile'].get('industry')}
+    - Revenue Size: {business_context['profile'].get('revenue_size')}
+    - Growth Projections: {business_context['financial_projections']}
+    - Strategic Plans: {business_context['strategic_analysis']}
+
+    Provide comprehensive AI recommendations:
+    1. Evaluate revenue streams from international operations, referencing Malaysia's Double Taxation Agreements (DTAs) for applicable reliefs on foreign income
+    2. Simulate foreign tax credits to minimize double taxation on ASEAN-derived revenue
+    3. Recommend optimal tax structures for cross-border operations, such as holding companies or joint ventures in tax-efficient jurisdictions
+    4. Identify tax incentives for businesses expanding into Malaysia, particularly in Labuan or Free Trade Zones, with compliance details under Section 4A (Income Tax Act 1967)
+    5. Create a summary table based on the points above
+
+    Include specific calculations, timelines, and implementation steps.
+    """
+    expansion_analysis = get_openai_response(expansion_prompt, "You are a tax expansion specialist", api_key)
+
+    # Analyze tax-friendly jurisdiction operations
+    jurisdiction_prompt = f"""
+    Based on the response: {data.get('tax_friendly_jurisdiction')}
+    
+    Business Context:
+    - Current Operations: {business_context['profile'].get('business_model')}
+    - Financial Status: {business_context['financial_projections']}
+    - Strategic Goals: {business_context['strategic_analysis']}
+
+    Provide detailed AI recommendations:
+    1. Assess the feasibility of relocating to Labuan IBFC, benefiting from 3% tax on trading profits or RM 20,000 flat tax for trading companies
+    2. Provide insights into operational models for businesses in Labuan International Business and Financial Centre (IBFC) and Free Trade Zones, considering tax exemptions and reduced customs duties
+    3. Recommend compliance strategies under the Labuan Offshore Financial Services Act 1996 and Free Trade Zone (FTZ) regulations for smoother tax operations
+    4. Create a summary table based on the points above
+
+    Include specific requirements, benefits calculations, and regulatory compliance steps.
+    """
+    jurisdiction_analysis = get_openai_response(jurisdiction_prompt, "You are a tax jurisdiction expert", api_key)
+
+    # Analyze restructuring considerations
+    restructuring_prompt = f"""
+    Based on the response: {data.get('restructuring')}
+    
+    Business Context:
+    - Company Structure: {business_context['profile'].get('incorporation_status')}
+    - Financial Analysis: {business_context['financial_projections']}
+    - Strategic Plans: {business_context['strategic_analysis']}
+
+    Provide AI-driven restructuring recommendations:
+    1. Recommend tax-efficient restructuring strategies to optimize transfer pricing compliance under Section 140A and minimize tax exposure
+    2. Analyze the implications of restructuring on withholding taxes for dividend distributions to non-resident shareholders under Section 109 (Income Tax Act 1967)
+    3. Propose a review of current ownership structures for alignment with Section 140A (related-party transactions) and identify opportunities for tax savings
+    4. Create a summary table based on the points above
+
+    Include impact analysis and compliance requirements.
+    """
+    restructuring_analysis = get_openai_response(restructuring_prompt, "You are a business restructuring tax expert", api_key)
+
+    # Analyze M&A plans
+    acquisition_prompt = f"""
+    Based on the response: {data.get('acquisitions')}
+    
+    Business Context:
+    - Company Size: {business_context['profile'].get('revenue_size')}
+    - Financial Status: {business_context['financial_projections']}
+    - Strategic Goals: {business_context['strategic_analysis']}
+
+    Provide AI-driven M&A tax recommendations:
+    1. Simulate the tax impact of acquisitions, including stamp duty exemptions for corporate restructuring under Stamp Act 1949
+    2. Analyze the tax efficiency of acquisition costs, either as deductible expenses or capitalized under Schedule 3 of the Income Tax Act 1967
+    3. Identify potential tax incentives for merged entities such as group relief provisions and the treatment of tax losses in mergers
+    4. Create a summary table based on the points above
+
+
+    Include detailed tax implications and optimization strategies.
+    """
+    acquisition_analysis = get_openai_response(acquisition_prompt, "You are an M&A tax specialist", api_key)
+
+    # Analyze capital expenditure plans
+    capex_prompt = f"""
+    Based on the response: {data.get('capital_expenditure')}
+    
+    Business Context:
+    - Current Assets: {business_context['profile'].get('shareholders_funds')}
+    - Financial Projections: {business_context['financial_projections']}
+    - Capital Planning: {business_context['capital_analysis']}
+
+    Provide AI recommendations for capital expenditure:
+    1. Model tax savings from Accelerated Capital Allowances (ACA) schemes under Budget 2023 and identify qualifying asset categories
+    2. Assess eligibility for Investment Tax Allowances (ITA) for sectors like manufacturing or renewable energy under Promotion of Investments Act 1986
+    3. Provide timing recommendations to maximize capital allowances for asset purchases and recommend ways to structure expenditures for better tax benefits
+    4. Create a summary table based on the points above
+
+    Include quantitative analysis and optimization strategies.
+    """
+    capex_analysis = get_openai_response(capex_prompt, "You are a capital expenditure tax expert", api_key)
+
+    # Combine all analyses into a structured report
+    complete_analysis = f"""
+    # Strategic Tax Planning Analysis
+
+    ## 1. Market Expansion Strategy
+    {expansion_analysis}
+
+    ## 2. Tax-Friendly Jurisdiction Analysis
+    {jurisdiction_analysis}
+
+    ## 3. Business Restructuring Considerations
+    {restructuring_analysis}
+
+    ## 4. Mergers & Acquisitions Tax Planning
+    {acquisition_analysis}
+
+    ## 5. Capital Expenditure Tax Strategy
+    {capex_analysis}
+    """
+
+    return complete_analysis
+def process_tactical_tax_planning(data, business_context, api_key):
+    """Process tactical tax planning questions and provide AI-driven recommendations"""
+    
+    # Equipment purchase analysis
+    equipment_prompt = f"""
+    Based on the response: {data.get('equipment_purchase')}
+    
+    Business Context:
+    - Industry: {business_context['profile'].get('industry')}
+    - Current Assets: {business_context['profile'].get('shareholders_funds')}
+    - Financial Projections: {business_context['financial_projections']}
+    - Capital Planning: {business_context['capital_analysis']}
+
+    Provide detailed AI recommendations:
+    1. Calculate Initial Allowance (IA) [20%] and Annual Allowance (AA) [14%] under Schedule 3 to maximize asset depreciation
+        - Show detailed calculations
+        - Provide timeline for claims
+        - Impact on tax savings
+    
+    2. Identify specific asset categories eligible for higher capital allowance rates (e.g., green technology or energy-efficient equipment)
+        - List qualifying categories
+        - Additional rates available
+        - Documentation requirements
+    
+    3. Recommend filing amendments if prior-year unclaimed capital allowances are identified
+        - Review procedure
+        - Time limitations
+        - Potential benefits
+    4. Create a summary table based on the points above
+
+
+    Include specific calculations, timelines, and regulatory references.
+    """
+    equipment_analysis = get_openai_response(equipment_prompt, "You are a capital allowance tax expert", api_key)
+
+    # Advanced payments analysis
+    payments_prompt = f"""
+    Based on the response: {data.get('advanced_payments')}
+    
+    Business Context:
+    - Operating Cash Flow: {business_context['profile'].get('operating_cashflow')}
+    - Working Capital: {business_context['capital_analysis']}
+    - Financial Status: {business_context['financial_projections']}
+
+    Provide AI-driven recommendations:
+    1. Identify prepaid expenses eligible for tax deductions under Section 33(1)
+        - List qualifying recurring operational costs like rent, insurance, software licenses
+        - Timing requirements
+        - Documentation needed
+    
+    2. Simulate the financial impact of accelerating pre-year-end expenses
+        - Calculate potential tax savings
+        - Cash flow implications
+        - Optimization strategies
+    
+    3. Recommend changes to maximize allowable deductions
+        - Timing strategies
+        - Documentation requirements
+        - Risk mitigation
+    4. Create a summary table based on the points above
+
+    Include quantitative analysis and compliance requirements.
+    """
+    payments_analysis = get_openai_response(payments_prompt, "You are a tax deduction specialist", api_key)
+
+    # Operational expenses analysis
+    expenses_prompt = f"""
+    Based on the response: {data.get('operational_expenses')}
+    
+    Business Context:
+    - Current Expenses: {business_context['profile'].get('operating_cashflow')}
+    - Financial Planning: {business_context['financial_projections']}
+    - Strategic Goals: {business_context['strategic_analysis']}
+
+    Provide comprehensive AI recommendations:
+    1. Suggest accelerating employee bonuses, marketing costs, or other deductible expenses
+        - List eligible expenses
+        - Timing considerations
+        - Tax impact calculations
+    
+    2. Recommend structuring operations for tax-efficient expense timing
+        - Operational adjustments needed
+        - Implementation timeline
+        - Cost-benefit analysis
+    
+    3. Strategies for minimizing income during high-tax periods
+        - Expense planning
+        - Timing optimization
+        - Risk considerations
+
+    4. Create a summary table based on the points above
+
+    Include practical implementation steps and compliance requirements.
+    """
+    expenses_analysis = get_openai_response(expenses_prompt, "You are an operational tax planning expert", api_key)
+
+    # Combine all analyses into a structured report
+    complete_analysis = f"""
+    # Tactical Tax Planning Analysis
+
+    ## 1. Equipment and Asset Purchase Strategy
+    {equipment_analysis}
+
+    ## 2. Advanced Payments and Pre-year-end Expenses
+    {payments_analysis}
+
+    ## 3. Operational Expense Optimization
+    {expenses_analysis}
+
+    """
+    return complete_analysis
+def process_compliance_tax_planning(data, business_context, api_key):
+    """Process compliance tax planning questions and provide AI-driven recommendations"""
+    
+    # Filing deadlines analysis
+    deadlines_prompt = f"""
+    Based on the response: {data.get('tax_filing_deadlines')}
+    
+    Business Context:
+    - Business Type: {business_context['profile'].get('incorporation_status')}
+    - Industry: {business_context['profile'].get('industry')}
+    - Revenue Size: {business_context['profile'].get('revenue_size')}
+    - Financial Status: {business_context['financial_projections']}
+
+    Provide detailed AI recommendations focusing on:
+    1. Automate compliance tracking and calculate penalties:
+        - Calculate potential penalties (RM 200/day under Section 112) for late filings
+        - Detailed penalty breakdown by filing type
+        - Total exposure assessment
+    
+    2. Highlight compliance issues:
+        - Review Form C (corporate tax) requirements and deadlines
+        - Analyze Form E (employee tax returns) obligations
+        - Identify missing or incomplete submissions
+    
+    3. Propose solutions:
+        - Compliance tracking system recommendations
+        - Filing schedule optimization
+        - Internal control improvements
+
+    4. Create a summary table based on the points above
+
+    Include specific timelines, calculations, and regulatory references.
+    """
+    deadlines_analysis = get_openai_response(deadlines_prompt, "You are a tax compliance expert", api_key)
+
+    # Audit notices analysis
+    audit_prompt = f"""
+    Based on the response: {data.get('audit_notices')}
+    
+    Business Context:
+    - Financial Records: {business_context['capital_analysis']}
+    - Business Operations: {business_context['profile_analysis']}
+    - Tax History: {business_context['strategic_analysis']}
+
+    Provide comprehensive AI recommendations:
+    1. Identify common audit triggers:
+        - Analysis of unreported income risks
+        - Review of large deductions
+        - Assessment of potential audit outcomes
+        - Industry-specific risk factors
+    
+    2. Record-keeping improvements:
+        - Compliance strategies for Section 82A requirements
+        - Documentation system recommendations
+        - Internal control enhancements
+        - Digital record-keeping solutions
+    
+    3. Audit preparation strategy:
+        - Document organization protocols
+        - Response procedures
+        - Risk mitigation steps
+
+    4. Create a summary table based on the points above
+
+    Include practical implementation steps and compliance requirements.
+    """
+    audit_analysis = get_openai_response(audit_prompt, "You are a tax audit specialist", api_key)
+
+    # Combine analyses into structured report
+    complete_analysis = f"""
+    # Tax Compliance Planning Analysis
+
+    ## 1. Filing Compliance Assessment
+    {deadlines_analysis}
+
+    ## 2. Audit Readiness Evaluation
+    {audit_analysis}
+    
+    """
+
+    return complete_analysis
+def process_investment_tax_planning(data, business_context, api_key):
+    """Process investment tax planning questions and provide AI-driven recommendations"""
+    
+    # Sukuk bonds investment analysis
+    sukuk_prompt = f"""
+    Based on the response: {data.get('tax_exempt_investments')}
+    
+    Business Context:
+    - Investment Amount: {business_context['profile'].get('shareholders_funds')}
+    - Financial Position: {business_context['financial_projections']}
+    - Cash Flow Status: {business_context['capital_analysis']}
+
+    Provide detailed AI recommendations:
+    1. Tax Savings Analysis:
+        - Calculate specific tax savings from sukuk bond exemptions under Income Tax (Exemption) Order 2011
+        - Provide detailed calculations based on investment amount
+        - Show annual tax benefit projections
+    
+    2. Investment Comparison:
+        - Compare tax-exempt sukuk bonds to other taxable instruments for return on investment
+        - Analyze after-tax returns
+        - Evaluate risk-adjusted returns
+        - Consider liquidity factors
+    
+    3. Optimization Strategy:
+        - Recommend optimal investment allocation
+        - Suggest timing of investments
+        - Identify additional tax-efficient instruments
+
+    4. Create a summary table based on the points above
+
+
+    Include quantitative analysis and specific calculations.
+    """
+    sukuk_analysis = get_openai_response(sukuk_prompt, "You are an investment tax expert", api_key)
+
+    # Employee retirement funds analysis
+    epf_prompt = f"""
+    Based on the response: {data.get('employee_retirement')}
+    
+    Business Context:
+    - Employee Count: {business_context['profile'].get('staff_strength')}
+    - Business Size: {business_context['profile'].get('revenue_size')}
+    - Growth Plans: {business_context['strategic_analysis']}
+
+    Provide comprehensive AI recommendations:
+    1. EPF Compliance Verification:
+        - Verify full EPF contribution compliance under Section 34(4)
+        - Calculate mandatory contribution requirements
+        - Assess current compliance status
+        - Identify gaps in compliance
+    
+    2. Tax Deductions Optimization:
+        - Recommend additional voluntary contributions to maximize tax deductions
+        - Calculate potential tax savings
+        - Propose contribution strategies
+    
+    3. Employee Retention Benefits:
+        - Simulate potential tax benefits of EPF contributions in increasing employee retention
+        - Analyze cost-benefit of increased contributions
+        - Recommend retention-focused strategies
+
+    4. Create a summary table based on the points above
+
+
+    Include practical implementation steps and calculations.
+    """
+    epf_analysis = get_openai_response(epf_prompt, "You are an employee benefits tax specialist", api_key)
+
+    # Combine analyses into structured report
+    complete_analysis = f"""
+    # Investment-Based Tax Planning Analysis
+
+    ## 1. Sukuk Bond Investment Strategy
+    {sukuk_analysis}
+
+    ## 2. Employee Retirement Fund Planning
+    {epf_analysis}
+
+    """
+
+    return complete_analysis
+
+def process_deductions_exemptions(data, business_context, api_key):
+    """Process deductions and exemptions analysis focusing on R&D and charitable donations"""
+    
+    # R&D expenditure analysis
+    rd_prompt = f"""
+    Based on the response: {data.get('rd_deductions')}
+    
+    Business Context:
+    - Industry: {business_context['profile'].get('industry')}
+    - Business Model: {business_context['profile'].get('business_model')}
+    - Strategic Plans: {business_context['strategic_analysis']}
+    - Financial Status: {business_context['financial_projections']}
+
+    Provide detailed AI recommendations:
+    1. R&D Eligibility Verification:
+        - Verify R&D activities against Section 34A requirements
+        - Analyze alignment with Public Ruling No. 5/2022 for double deduction eligibility
+        - Assess current R&D documentation
+        - Identify compliance gaps
+    
+    2. Additional R&D Opportunities:
+        - Identify additional R&D expenses eligible for claims
+        - Focus on prototype development costs
+        - Analyze software-related R&D expenses
+        - Calculate potential additional deductions
+    
+    3. Implementation Strategy:
+        - Documentation requirements
+        - Claim procedure optimization
+        - Risk mitigation steps
+
+    4. Create a summary table based on the points above
+
+    Include specific calculations and regulatory references.
+    """
+    rd_analysis = get_openai_response(rd_prompt, "You are an R&D tax specialist", api_key)
+
+    # Charitable donations analysis
+    donations_prompt = f"""
+    Based on the response: {data.get('charitable_donations')}
+    
+    Business Context:
+    - Revenue Size: {business_context['profile'].get('revenue_size')}
+    - Profit Range: {business_context['profile'].get('profit_range')}
+    - Financial Projections: {business_context['financial_projections']}
+
+    Provide comprehensive AI recommendations:
+    1. Deduction Limit Analysis:
+        - Calculate deduction limits under Section 44(6)
+        - Analyze 10% aggregate income cap
+        - Project potential tax savings
+        - Optimize donation timing
+    
+    2. Donation Structure Optimization:
+        - Advise on structuring donations for maximum allowable reliefs
+        - Recommend approved institutions
+        - Suggest optimal donation timing
+        - Calculate tax benefit scenarios
+    
+    3. Implementation Strategy:
+        - Documentation requirements
+        - Compliance procedures
+        - Record-keeping recommendations
+
+    4. Create a summary table based on the points above
+
+    Include practical calculations and implementation steps.
+    """
+    donations_analysis = get_openai_response(donations_prompt, "You are a charitable tax deductions expert", api_key)
+
+    # Combine analyses into structured report
+    complete_analysis = f"""
+    # Deductions and Exemptions Analysis
+
+    ## 1. R&D Expenditure Deductions
+    {rd_analysis}
+
+    ## 2. Charitable Donations Strategy
+    {donations_analysis}
+
+    """
+
+    return complete_analysis
+
+def process_income_structuring(data, business_context, api_key):
+    """Process income splitting and structuring analysis focusing on dividend distributions"""
+    
+    dividend_prompt = f"""
+    Based on the response about dividend distributions: {data.get('dividend_distribution')}
+    
+    Business Context:
+    - Revenue: {business_context['profile'].get('revenue_size')}
+    - Profit: {business_context['profile'].get('profit_range')}
+    - Company Structure: {business_context['profile'].get('incorporation_status')}
+    - Financial Performance: {business_context['financial_projections']}
+
+    Provide detailed analysis focusing on two key areas:
+
+    1. Withholding Tax Analysis:
+        a) Calculate the withholding tax implications for distributions under Section 109:
+           - For non-resident shareholders
+           - Based on actual distribution amount (>{data.get('dividend_distribution', '')})
+           - Impact on company's cash flow
+           - Impact on shareholders' net receipts
+    
+    2. Profit Allocation Strategy:
+        a) Recommend tax-efficient distribution strategies focusing on:
+           - Low-taxed individuals
+           - Tax-efficient entities
+           - Optimal timing of distributions
+           - Alternative distribution methods
+
+    For each recommendation, provide:
+    - Specific calculations with amounts
+    - Tax implications
+    - Implementation steps
+    - Required documentation
+    - Risk considerations
+    - Create a summary table based on the points above
+    """
+    
+    analysis = get_openai_response(dividend_prompt, "You are an income structuring tax expert", api_key)
+    
+    # Structure the complete analysis
+    complete_analysis = f"""
+    # Income Splitting and Structuring Analysis
+
+    {analysis}
+
+    """
+    
+    return complete_analysis
+
+def process_tax_incentives(data, business_context, api_key):
+    """Process tax incentives analysis focusing on SME tax rates and eligibility"""
+    
+    sme_prompt = f"""
+    Based on the response about SME qualification: {data.get('sme_tax_rates')}
+    
+    Business Context:
+    - Annual Revenue: {business_context['profile'].get('revenue_size')}
+    - Business Model: {business_context['profile'].get('business_model')}
+    - Industry: {business_context['profile'].get('industry')}
+    - Financial Projections: {business_context['financial_projections']}
+
+    Provide detailed analysis for:
+
+    1. SME Tax Rate Eligibility:
+        a) Confirm eligibility for 17% tax rate:
+           - Analyze first RM 600,000 of taxable income
+           - Reference Budget 2025 requirements
+           - Calculate potential tax savings
+           - Compare with standard tax rates
+    
+    2. Revenue Management Strategy:
+        a) If below threshold:
+           - Recommend strategies to maintain SME status
+           - Project revenue growth impact
+           - Suggest operational optimizations
+        
+        b) If exceeding threshold:
+           - Analyze impact of losing SME status
+           - Propose revenue structuring options
+           - Calculate cost-benefit of maintaining status
+
+    Include:
+    - Specific tax savings calculations
+    - Revenue threshold management strategies
+    - Implementation timeline
+    - Risk considerations
+    - Create a summary table based on the points above
+    """
+    
+    analysis = get_openai_response(sme_prompt, "You are a SME tax incentives expert", api_key)
+    
+    # Structure the complete analysis
+    complete_analysis = f"""
+    # Tax Incentives and Reliefs Analysis
+
+    {analysis}
+
+    """
+    
+    return complete_analysis
+
+def process_global_tax_planning(data, business_context, api_key):
+    """Process global tax planning analysis focusing on double taxation relief and DTA compliance"""
+    
+    dta_prompt = f"""
+    Based on the response about DTA utilization: {data.get('double_taxation')}
+    
+    Business Context:
+    - International Operations: {business_context['profile'].get('customer_type')}
+    - Revenue Scale: {business_context['profile'].get('revenue_size')}
+    - Foreign Income: {business_context['financial_projections']}
+    - Business Model: {business_context['profile'].get('business_model')}
+
+    Provide detailed analysis focusing on:
+
+    1. Double Taxation Relief Automation:
+        a) Identify eligible reliefs under Malaysia's DTA network:
+           - Analyze current foreign income streams
+           - Map applicable DTAs
+           - Calculate maximum foreign tax credits
+           - Identify unutilized relief opportunities
+    
+        b) Relief Maximization Strategy:
+           - Review current DTA utilization
+           - Calculate potential additional claims
+           - Identify optimization opportunities
+           - Project tax savings
+
+    2. Compliance Framework:
+        a) Provide comprehensive templates for:
+           - Relief claim documentation
+           - Foreign income reporting
+           - Tax credit calculations
+           - Compliance checklists
+        
+        b) Double Taxation Prevention:
+           - Income characterization guidelines
+           - DTA application procedures
+           - Documentation requirements
+           - Filing deadlines
+
+    For each recommendation, include:
+    - Specific calculations
+    - Implementation steps
+    - Required documentation
+    - Risk considerations
+    - Timeline for action
+    - Create a summary table based on the points above
+    """
+    
+    analysis = get_openai_response(dta_prompt, "You are a global tax planning expert", api_key)
+    
+    # Structure the complete analysis
+    complete_analysis = f"""
+    # Global Tax Planning Analysis
+
+    {analysis}
+
+    """
+    
+    return complete_analysis
+
+def process_deferral_strategies(data, business_context, api_key):
+    """Process deferral strategies analysis focusing on revenue recognition timing"""
+    
+    deferral_prompt = f"""
+    Based on the response about revenue deferrals: {data.get('revenue_deferral')}
+    
+    Business Context:
+    - Current Revenue: {business_context['profile'].get('revenue_size')}
+    - Cash Flow Status: {business_context['profile'].get('operating_cashflow')}
+    - Growth Projections: {business_context['financial_projections']}
+    - Business Model: {business_context['profile'].get('business_model')}
+
+    Provide detailed analysis focusing on:
+
+    1. Financial Impact Simulation:
+        a) Model impact of deferred income:
+           - Calculate effect on current year taxable income
+           - Project impact on cash flow
+           - Analyze working capital implications
+           - Compare scenarios with different deferral amounts
+    
+        b) Quantitative Analysis:
+           - Current vs. Deferred tax liability
+           - Cash flow timing differences
+           - Working capital adjustments
+           - Net present value of deferrals
+
+    2. Strategic Deferral Planning:
+        a) Revenue shifting recommendations:
+           - Identify high-income to lower-tax period opportunities
+           - Compliance requirements with Revenue Recognition Rules
+           - Timing optimization strategies
+           - Documentation requirements
+        
+        b) Risk Management:
+           - Compliance considerations
+           - Cash flow management
+           - Documentation needs
+           - Audit defense preparation
+
+    Include:
+    - Specific calculations showing tax impacts
+    - Cash flow projections
+    - Implementation timeline
+    - Compliance checklist
+    - Create a summary table based on the points above
+    """
+    
+    analysis = get_openai_response(deferral_prompt, "You are a tax deferral strategies expert", api_key)
+    
+    # Structure the complete analysis
+    complete_analysis = f"""
+    # Deferral Strategies Analysis
+
+    {analysis}
+
+    """
+    
+    return complete_analysis
+
+def process_estate_succession_planning(data, business_context, api_key):
+    """Process estate and succession tax planning focusing on business ownership transfer"""
+    
+    succession_prompt = f"""
+    Based on the response about ownership transfer: {data.get('ownership_transfer')}
+    
+    Business Context:
+    - Company Value: {business_context['profile'].get('shareholders_funds')}
+    - Business Model: {business_context['profile'].get('business_model')}
+    - Industry: {business_context['profile'].get('industry')}
+    - Financial Performance: {business_context['financial_projections']}
+
+    Provide detailed analysis focusing on:
+
+    1. Wealth Transfer Strategy Modeling:
+        a) Family Trust Structure Analysis:
+           - Evaluate trust options under Malaysia Trust Act 2013
+           - Calculate inheritance tax minimization potential
+           - Compare different trust structures
+           - Assess compliance requirements
+    
+        b) Long-term Benefits:
+           - Tax savings projections
+           - Wealth preservation strategies
+           - Control retention options
+           - Succession timeline planning
+
+    2. Share Transfer Simulation:
+        a) Compare Gifting vs. Inheritance:
+           - Calculate tax implications of each approach
+           - Project multi-generational tax savings
+           - Assess timing considerations
+           - Evaluate control transfer options
+        
+        b) Implementation Framework:
+           - Documentation requirements
+           - Legal compliance steps
+           - Transfer timing optimization
+           - Risk management strategies
+
+    Include:
+    - Specific calculations for different scenarios
+    - Implementation steps and timeline
+    - Required documentation
+    - Risk considerations
+    - Regulatory compliance requirements
+    - Create a summary table based on the points above
+    """
+    
+    analysis = get_openai_response(succession_prompt, "You are an estate and succession planning expert", api_key)
+    
+    # Structure the complete analysis
+    complete_analysis = f"""
+    # Estate and Succession Tax Planning Analysis
+
+    {analysis}
+
+    """
+    
+    return complete_analysis
 # Main Function
 def main():
     initialize_session_state()
@@ -2249,15 +3369,140 @@ def main():
                         "strategic_planning": st.session_state["strategic_planning"]
                     }
                     analysis = process_financial_projections_with_gpt(projections, company_data, st.session_state.openai_api_key)
-                    st.session_state["financial_projections"] = analysis
+                    analysis2 = process_financial_projections_with_gpt2(projections, company_data, st.session_state.openai_api_key)
+                    st.session_state["financial_projections"] = analysis + "\n\n" + analysis2
                     st.session_state.current_step = 7
                     st.rerun()
             elif "growth_projections" in st.session_state:
                 st.success("✓ Growth Projections Completed")
                 with st.expander("Click to View Financial Projections"):
                     st.markdown(st.session_state["financial_projections"])
+
+    # Taxation Module
+    if st.session_state.current_step >= 7:
+        with st.container():
+            st.write("## Step 8: Taxation Planning")
+            if st.session_state.current_step == 7:
+                taxation = render_taxation_module_form()
+                if taxation:
+                    st.session_state["taxation_module"] = taxation
+                    
+                    # Enhanced business context with financial and strategic analyses
+                    business_context = {
+                        "profile": st.session_state.get("business_profile", {}),
+                        "priorities": st.session_state.get("business_priorities", {}),
+                        "priorities_analysis": st.session_state.get("priorities_analysis", ""),
+                        "options": st.session_state.get("business_options", []),
+                        "capital": st.session_state.get("working_capital", {}),
+                        "capital_analysis": st.session_state.get("capital_analysis", ""),
+                        "strategic": st.session_state.get("strategic_planning", {}),
+                        "strategic_analysis": st.session_state.get("strategic_analysis", ""),
+                        "growth": st.session_state.get("growth_projections", {}),
+                        "financial_projections": st.session_state.get("financial_projections", ""),
+                        "profile_analysis": st.session_state.get("business_profile_analysis", ""),
+                        "executive_summary": st.session_state.get("executive_summary", "")
+                    }
+                    
+                    # Process each module with full context
+                    st.session_state["strategic_tax"] = process_strategic_tax_planning(
+                        taxation["strategic_tax_planning"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state["tactical_tax"] = process_tactical_tax_planning(
+                        taxation["tactical_tax_planning"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state["compliance_tax"] = process_compliance_tax_planning(
+                        taxation["compliance_tax_planning"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state["investment_tax"] = process_investment_tax_planning(
+                        taxation["investment_tax_planning"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state["deductions_tax"] = process_deductions_exemptions(
+                        taxation["deductions_exemptions"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state["income_tax"] = process_income_structuring(
+                        taxation["income_structuring"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state["incentives_tax"] = process_tax_incentives(
+                        taxation["tax_incentives"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state["global_tax"] = process_global_tax_planning(
+                        taxation["global_tax_planning"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state["deferral_tax"] = process_deferral_strategies(
+                        taxation["deferral_strategies"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state["estate_tax"] = process_estate_succession_planning(
+                        taxation["estate_planning"], 
+                        business_context,
+                        st.session_state.openai_api_key
+                    )
+                    
+                    st.session_state.current_step = 8
+                    st.rerun()
+                    
+            elif "taxation_module" in st.session_state:
+                st.success("✓ Taxation Planning Completed")
+                
+                # Display each analysis with full context
+                with st.expander("Strategic Tax Planning Analysis", expanded=True):
+                    st.markdown(st.session_state["strategic_tax"])
+                    
+                with st.expander("Tactical Tax Planning Analysis"):
+                    st.markdown(st.session_state["tactical_tax"])
+                    
+                with st.expander("Tax Compliance Analysis"):
+                    st.markdown(st.session_state["compliance_tax"])
+                    
+                with st.expander("Investment Tax Planning Analysis"):
+                    st.markdown(st.session_state["investment_tax"])
+                    
+                with st.expander("Deductions and Exemptions Analysis"):
+                    st.markdown(st.session_state["deductions_tax"])
+                    
+                with st.expander("Income Structuring Analysis"):
+                    st.markdown(st.session_state["income_tax"])
+                    
+                with st.expander("Tax Incentives Analysis"):
+                    st.markdown(st.session_state["incentives_tax"])
+                    
+                with st.expander("Global Tax Planning Analysis"):
+                    st.markdown(st.session_state["global_tax"])
+                    
+                with st.expander("Deferral Strategies Analysis"):
+                    st.markdown(st.session_state["deferral_tax"])
+                    
+                with st.expander("Estate and Succession Planning Analysis"):
+                    st.markdown(st.session_state["estate_tax"])
+
     # Final Report Generation
-    if st.session_state.current_step == 7:
+    if st.session_state.current_step == 8:
         st.write("## Review and Edit")
         
         sections = {
@@ -2312,6 +3557,10 @@ def main():
             "Growth Projections": {
                 "key": "growth_projections",
                 "display_fields": [("Growth Rate", "growth_rate")]
+            },
+            "Taxation Planning": {
+                "key": "taxation_module",
+                "is_dict": True
             }
         }
 
@@ -2320,7 +3569,8 @@ def main():
             "business_priorities": "priorities_analysis",
             "working_capital": "capital_analysis",
             "strategic_planning": "strategic_analysis",
-            "growth_projections": "financial_projections"
+            "growth_projections": "financial_projections",
+            "taxation_module": "taxation_analysis"
         }
 
         for title, config in sections.items():
@@ -2340,13 +3590,19 @@ def main():
                             for item in st.session_state[key]:
                                 st.write(f"- {item}")
                         elif config.get("is_dict", False):
-                            for q, responses in st.session_state[key].items():
-                                st.markdown(f"**{q}**")
-                                if isinstance(responses, list):
-                                    for resp in responses:
-                                        st.write(f"- {resp}")
-                                else:
-                                    st.write(responses)
+                            if key == "taxation_module":
+                                for section, data in st.session_state[key].items():
+                                    st.markdown(f"**{section.replace('_', ' ').title()}:**")
+                                    for q, a in data.items():
+                                        st.write(f"- {q.replace('_', ' ').title()}: {a}")
+                            else:
+                                for q, responses in st.session_state[key].items():
+                                    st.markdown(f"**{q}**")
+                                    if isinstance(responses, list):
+                                        for resp in responses:
+                                            st.write(f"- {resp}")
+                                    else:
+                                        st.write(responses)
                         else:
                             data = st.session_state[key]
                             for label, field in config.get("display_fields", []):
@@ -2355,7 +3611,7 @@ def main():
                                     if isinstance(value, dict):
                                         st.markdown(f"**{label}:**")
                                         for k, v in value.items():
-                                            if v:  # Only show selected/true values
+                                            if v:
                                                 if k == "Others please specify" and data.get("other_purpose"):
                                                     st.write(f"- Others: {data['other_purpose']}")
                                                 elif k == "Others please specify" and data.get("other_funding_type"):
@@ -2388,9 +3644,10 @@ def main():
             st.write("## Generate Final Report")
             
             # Generate PDF Report button
-            if st.button("📄 Generate Complete Report", type="primary"):
+            if st.button("📄 Generate Complete Reports", type="primary"):
                 try:
-                    with st.spinner("Generating PDF report..."):
+                    with st.spinner("Generating PDF reports..."):
+                        # Main business analysis data
                         sme_data = {
                             'business_profile_analysis': st.session_state['business_profile_analysis'],
                             'priorities_analysis': st.session_state['priorities_analysis'],
@@ -2400,19 +3657,42 @@ def main():
                             'financial_projections': st.session_state['financial_projections']
                         }
                         
+                        # Tax analysis data
+                        tax_data = {
+                            'strategic_tax': st.session_state['strategic_tax'],
+                            'tactical_tax': st.session_state['tactical_tax'],
+                            'compliance_tax': st.session_state['compliance_tax'],
+                            'investment_tax': st.session_state['investment_tax'],
+                            'deductions_tax': st.session_state['deductions_tax'],
+                            'income_tax': st.session_state['income_tax'],
+                            'incentives_tax': st.session_state['incentives_tax'],
+                            'global_tax': st.session_state['global_tax'],
+                            'deferral_tax': st.session_state['deferral_tax'],
+                            'estate_tax': st.session_state['estate_tax']
+                        }
+                        
                         personal_info = st.session_state["personal_profile"].copy()
                         personal_info['company_name'] = st.session_state['business_profile']['company_name']
                         
-                        pdf_buffer = generate_pdf(sme_data, personal_info, [4, 8, 11, 14, 17, 20])
+                        # Generate both PDFs
+                        main_pdf_buffer = generate_main_pdf(sme_data, personal_info, [4, 8, 11, 14, 17, 20])
+                        tax_pdf_buffer = generate_tax_pdf(tax_data, personal_info, [4, 7, 10, 13, 16, 19, 22, 25, 28, 31])
                         
-                        if pdf_buffer:
-                            st.success("PDF report generated successfully!")
+                        if main_pdf_buffer and tax_pdf_buffer:
+                            st.success("PDF reports generated successfully!")
                             
-                            # PDF Download button
+                            # Download buttons for both PDFs
                             st.download_button(
-                                "📥 Download SME Analysis Report",
-                                data=pdf_buffer,
-                                file_name=f"sme_analysis_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                "📥 Download Business Analysis Report",
+                                data=main_pdf_buffer,
+                                file_name=f"business_analysis_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                mime="application/pdf"
+                            )
+                            
+                            st.download_button(
+                                "📥 Download Tax Analysis Report",
+                                data=tax_pdf_buffer,
+                                file_name=f"tax_analysis_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                 mime="application/pdf"
                             )
                             
@@ -2425,7 +3705,8 @@ def main():
                                 mime="application/vnd.ms-excel"
                             )
                             
-                    with st.spinner("Sending report via email..."):
+                    # Send emails with both PDFs
+                    with st.spinner("Sending reports via email..."):
                         analysis_statistics = calculate_analysis_statistics(st.session_state)
                         contact_details = f"""Contact Details:
                     Full Name: {personal_info.get('full_name', 'Not provided')}
@@ -2436,12 +3717,13 @@ def main():
                             send_combined_email_with_attachments(
                                 receiver_email=email,
                                 company_name=personal_info['company_name'],
-                                subject="SME Analysis Report and Input Data",
-                                body="SME Analysis Report and Input Data from SMEBoost Lite GenAI.",
-                                pdf_buffer=pdf_buffer,
+                                subject="SME Analysis Reports and Input Data",
+                                body="SME Business and Tax Analysis Reports from SMEBoost Lite GenAI.",
+                                pdf_buffer=main_pdf_buffer,  # You'll need to modify the email function to handle multiple PDFs
                                 excel_buffer=excel_buffer,
                                 statistics=analysis_statistics,
-                                contact_details=contact_details
+                                contact_details=contact_details,
+                                tax_pdf_buffer=tax_pdf_buffer  # New parameter
                             )
                             
                 except Exception as e:
