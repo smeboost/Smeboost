@@ -2007,16 +2007,27 @@ def create_header_footer(canvas, doc):
     canvas.saveState()
     
     if doc.page > 1:  # Only show on pages after the first page
-        # Header logos positioning
-        x_start = doc.width + doc.leftMargin - 2.0 * inch
-        y_position = doc.height + doc.topMargin - 0.2 * inch
-        image_width = 2.0 * inch
+        # Adjust position for top-right logos
+        x_start = doc.width + doc.leftMargin - 0.5 * inch  # Shift logos slightly to the right
+        y_position = doc.height + doc.topMargin - 0.1 * inch
+        image_width = 0.5 * inch
         image_height = 0.5 * inch
-        
-        if os.path.exists("smeimge.jpg"):
+
+        # Draw logos
+        if os.path.exists("ceai.png"):
             canvas.drawImage(
-                "smeimge.jpg", 
+                "ceai.png", 
                 x_start, 
+                y_position, 
+                width=image_width, 
+                height=image_height, 
+                mask="auto"
+            )
+        
+        if os.path.exists("capm.png"):
+            canvas.drawImage(
+                "capm.png", 
+                x_start - image_width - 0.1 * inch,
                 y_position, 
                 width=image_width, 
                 height=image_height, 
@@ -3732,3 +3743,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+#16/12/2024
